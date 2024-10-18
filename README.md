@@ -1,17 +1,17 @@
 # Code description
 
-Code computes the potential (current-free) magnetic field in a box with a rectilinear mesh using 
-geometric multrigrid given the normal component of the magnetic field on the boundary faces of the box. 
-The method computes the potential field via a vector potential formulation.  The code returns both the vector 
+Code computes the potential (current-free) magnetic field on a rectilinear mesh in a Cartesian box, given
+the normal component of the magnetic field on each boundary face. The solution is computed using geometric multrigrid applied
+to a finite-difference scheme. The method computes the magnetic field via a vector potential formulation.  The code returns both the vector 
 potential in Coulomb gauge and the corresponding magnetic field.
 
 The code uses a second-order finite-difference scheme for the discretization. In principle, this 
 means that the numerical truncation error should decrease as the square of the mesh spacing. 
 
-The backbone of the code is a set of module for solving Poisson's equation in N dimensions
+The backbone of the code is a set of modules for solving Poisson's equation in N dimensions
 using geometric multigrid. This multigrid solver was written first, and then the vector potential
-code was added later.Thename of the code NDSM is derived from the original set of modules, i.e.
-N-Dimension Solver Multrigrid (NDSM). The vector-potential module, however, is specifically 
+code was added later.The name of the code NDSM is derived from the original set of modules, i.e.
+N-Dimensional Solver Multrigrid (NDSM). The vector-potential module, however, is specifically 
 designed for 3D, but leverages the more general N-dimensional backend. 
 
 Code is written in Fortran 2003 and tested using the gfortran 8.3.0 compiler. It has only been
@@ -23,9 +23,7 @@ Paper DOI: 10.3847/1538-4357/ab8810
 # Mesh and dimensions
 
 The mesh is rectilinear, i.e. it is described by three mesh vectors x,y,z. These are assumed
-to have fixed spacing. 
-
-The code makes no explicit assumptions about the units of either B or A, although the
+to have fixed spacing. The code makes no explicit assumptions about the units of either B or A, although the
 length scales are non-dimensional. 
 
 # Vector Potential Gauge 
@@ -40,10 +38,6 @@ the paper and the notes for more detail.
 The core Fortran code builds a shared library. 
 
 Running make will build the shared library, called ndsm.so by default.
-
-Without make, the code be be compiled as 
-
-gfortran -O3 -fpic -shared -o ndsm.so ndsm_root.f90  ndsm_interp.f90 ndsm_multigrid_core.f90 ndsm_optimized.f90 ndsm_poisson.f90 ndsm_vector_potential.f90
 
 # OpenMP
 
@@ -69,8 +63,8 @@ in the shared library using the Python ctypes module. The shared library needs t
 first and either exist in sys.path, or else the explicit path to the shared library needs to
 be passed as an argument to the function (see the docstring). 
 
-The basic Python module only requires numpy and ctypes. The integration and unit tests require
-more modules, e.g. matplotlib. 
+The basic Python module only requires numpy and ctypes. Some of the tests require more 
+modules, e.g. matplotlib. 
 
 # Tests 
 
@@ -80,7 +74,7 @@ to demonstrate that the truncation error has the correct scaling with mesh spaci
 a basic test of correctness for the method. 
 
 The truncation error is estimated by applying the code to a known analytic test case and computing metrics
-for the difference between the numerical and analytic solutions. The error metrics used as the max. 
+for the difference between the numerical and analytic solutions. The error metrics used are the max. 
 and mean magnitude of the difference between the numerical and analytic vector fields. For a correctly 
 implemented second-order scheme, (generally) both these metrics should decrease with the square of the mesh spacing
 (for a uniform mesh). The max. error in particular may not achieve second order scaling for certain problems. 
