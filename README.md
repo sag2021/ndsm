@@ -22,19 +22,11 @@ Paper DOI: 10.3847/1538-4357/ab8810
 
 # Mesh and dimensions
 
-The mesh is assumed to be uniform in x,y,z and the spacing is determined by the number of points
-in the x direction,i.e. h = 1/(nx-1), where h is the mesh spacing. The actual core multrigrid 
-module doesn't require this, but the vector potential module does assume this.
-
-For the purpose of indexing arrays, the x dimension is assumed to the dimension that is contiguous 
-in memory. For Fortran, this is the left-most index. For Python it is the opposite. Therefore,
-if using the Python interface, nshape[-1] is nx and determines the mesh spacing.
-
-The mesh always has a non-dimensional length of 1 in the x dimension. 
+The mesh is rectilinear, i.e. it is described by three mesh vectors x,y,z. These are assumed
+to have fixed spacing. 
 
 The code makes no explicit assumptions about the units of either B or A, although the
 length scales are non-dimensional. 
-
 
 # Vector Potential Gauge 
 
