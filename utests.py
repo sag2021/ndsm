@@ -29,11 +29,6 @@
 
 import numpy as np
 
-try:
-  import matplotlib.pyplot as plt
-except:
-  print("Warning: can't load matplotlib")
-
 def power_law_fit(x,y,cov=False):
   """
     Fit a power law y = A*x^gamma
