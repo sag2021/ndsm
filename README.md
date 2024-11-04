@@ -11,7 +11,7 @@ means that the numerical truncation error should decrease as the square of the m
 The backbone of the code is a set of modules for solving Poisson's equation in N dimensions
 using geometric multigrid. This multigrid solver was written first, and then the vector potential
 code was added later.The name of the code NDSM is derived from the original set of modules, i.e.
-N-Dimensional Solver Multrigrid (NDSM). The vector-potential module, however, is specifically 
+N-Dimensional Solver Multigrid (NDSM). The vector-potential module, however, is specifically 
 designed for 3D, but leverages the more general N-dimensional backend. 
 
 Code is written in Fortran 2003 and tested using the gfortran 8.3.0 compiler. It has only been
@@ -29,9 +29,9 @@ length scales are non-dimensional.
 # Vector Potential Gauge 
 
 The vector potential is computed in the Coulomb gauge. However, note that in a box,
-the Coulomb gauge is not necessarily unique, when the boundary conditions are on the normal component
+the Coulomb gauge is not necessarily unique when the boundary conditions are on the normal component
 of the magnetic field. The NDSM code makes a particular choice in resolving this ambiguity. See
-the paper and the notes for more detail. 
+the paper and the notes for more details. 
 
 # Compile shared library
 
