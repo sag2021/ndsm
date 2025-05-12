@@ -43,6 +43,7 @@ MODULE NDSM_VECTOR_POTENTIAL
   INTEGER,PUBLIC,PARAMETER :: IOPT_FACE1   = 2     !< Approach to solving BVP
   INTEGER,PUBLIC,PARAMETER :: IOPT_IERR    = 3     !< Error solving BVP
   INTEGER,PUBLIC,PARAMETER :: IOPT_FLXCRL  = 4     !< Order in which flux correction is applied
+  INTEGER,PUBLIC,PARAMETER :: IOPT_DEBUG   = 5     !< Prints more information when running
 
   ! ROPT VECTOR
   !
@@ -125,6 +126,9 @@ CONTAINS
 SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
 
   IMPLICIT NONE
+
+  ! SUBNAME
+  CHARACTER(LEN=*),PARAMETER :: THIS_SUB = "compute_vector_potential"
 
   ! INPUT
   INTEGER(IT) ,DIMENSION(4),INTENT(IN) :: nshape
@@ -243,11 +247,13 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ENDDO
   
   ! Allocate memory to hold boundary conditions 
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Allocate memory to hold boundary conditions...")
   DO i=1,SIZE(bn)  
     ALLOCATE(bn(i)%val(nsize_bn(i)))
   ENDDO
   
   ! Allocate mesh for boundary faces
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Allocate mesh for boundary faces...")
   DO j=1,SIZE(bn)
     DO i=1,2
       ALLOCATE(mesh_bn(i,j)%val( nshape_bn(i,j) ))
@@ -321,6 +327,7 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   !
   ! Solve BVP on each boundary
   !
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Solve BVP on each boundary...")
   DO i=1,SIZE(bn)
   
     ! Compute number of grids
@@ -368,6 +375,8 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ! At = - grad(chi) x n
   !
   !
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Compute vector potential boundary conditions...")
+
   DO i=1,SIZE(chi)
   
     ! Initialize to zero
@@ -386,8 +395,11 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ! SOLVE 3D BVP
   ! =====================
 
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Solve BVP 3D...")
+
   ndim  = 3
   nsize = PRODUCT(nshape(:3))
+
       
   !
   ! Compute with Bn nonzero on only one face at a time
@@ -429,6 +441,8 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ! Compute curl and perform flux correction. The IOPT_ACBC
   ! flag determines the order in which this is performed.
   !
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Compute B = curl(B) and flux correction...")
+
   SELECT CASE(IOPT(IOPT_FLXCRL))
   
     CASE(1)
@@ -459,7 +473,9 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ! FREE MEMORY
   ! ==================
 
-  ! Deallocate derived types
+  ! Deallocate 
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Deallocate memory...")
+
   DO i=1,SIZE(bn)
     DEALLOCATE(bn(i)%val)
     DO j=1,2

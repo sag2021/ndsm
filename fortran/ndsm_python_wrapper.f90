@@ -52,6 +52,9 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
 
   IMPLICIT NONE
 
+  ! NAME
+  CHARACTER(LEN=*),PARAMETER :: THIS_SUB = "ndsm_vector_solve"
+
   ! INPUT
   INTEGER(C_SIZE_T),VALUE                         :: nsize
   INTEGER(C_INT),DIMENSION(4)         ,INTENT(IN) :: nshape4
@@ -60,9 +63,9 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   REAL(C_DOUBLE),DIMENSION(nshape4(3)),INTENT(IN) :: z
 
   ! INPUT/OUTPUT
-  INTEGER(C_INT),DIMENSION(IOPT_LEN),INTENT(INOUT) :: ioptc
-  REAL(C_DOUBLE),DIMENSION(IOPT_LEN),INTENT(INOUT) :: ropt
-  REAL(C_DOUBLE),DIMENSION(nsize)   ,INTENT(INOUT) :: b
+  INTEGER(C_INT),DIMENSION(0:IOPT_LEN-1),INTENT(INOUT) :: ioptc
+  REAL(C_DOUBLE),DIMENSION(0:IOPT_LEN-1),INTENT(INOUT) :: ropt
+  REAL(C_DOUBLE),DIMENSION(nsize)       ,INTENT(INOUT) :: b
   
   ! OUTPUT
   REAL(FP),DIMENSION(nsize),INTENT(OUT) :: A
@@ -74,7 +77,7 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   REAL(FP)                  :: tend,tstart
   TYPE(MG_PTR),DIMENSION(3) :: mesh
   !REAL(FP)                  :: dq
-  INTEGER(IT)               :: iopt(IOPT_LEN)
+  INTEGER(IT)               :: iopt(0:IOPT_LEN-1)
   
   ! SHAPE
   INTEGER(IT),DIMENSION(4) :: nshape
@@ -85,6 +88,9 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   ! Copy in 
   nshape = nshape4
   iopt   = ioptc
+
+  ! Set debug flag 
+  DEBUG = (iopt(IOPT_DEBUG) == 1)
 
   ! Start
   tstart = get_cpu_time()
@@ -98,6 +104,7 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   !dq = REAL(1,FP)/(nshape(1)-REAL(1,FP))
     
   ! Allocate memory
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Allocating memory for mesh...")
   DO i=1,SIZE(mesh)
     ALLOCATE(mesh(i)%val(nshape(i)))
   ENDDO
@@ -113,16 +120,18 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   !
   ! Call NDSM vector potential subroutine
   !
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Calling compute_vector_potential...")
   CALL compute_vector_potential(nshape,iopt,ropt,mesh,A,B)
     
-  ! Check for generic error
-  ierr = iopt(IOPT_IERR)
+  ! Check for generic error,
+  !ierr = iopt(IOPT_IERR)
   
   ! =============
   ! MEMORY FREE
   ! ============
     
   ! Free mesh
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Deallocating memory for mesh...")
   DO i=1,SIZE(mesh)
     DEALLOCATE(mesh(i)%val)
   ENDDO
@@ -135,6 +144,8 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
 
   ! Copy out
   ioptc = iopt
+
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Exiting Fortran lib...")
     
 END FUNCTION
 
@@ -164,6 +175,12 @@ FUNCTION get_iopt_ncycles() BIND(C) RESULT(val)
   IMPLICIT NONE
   INTEGER(C_INT) :: val
   val = IOPT_NCYCLES
+END FUNCTION
+
+FUNCTION get_iopt_debug() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_DEBUG
 END FUNCTION
 
 FUNCTION get_ropt_tim() BIND(C) RESULT(val)
