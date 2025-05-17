@@ -35,17 +35,22 @@ MODULE NDSM_PYTHON_WRAPPER
 
 ! ---------------------------------------------------------------------
 !
-!>@name ndsm_vector
+!>@name ndsm_vector_solve
 !
-!>@brief Computes vector potential and B = curl(A)
-!
+!>@brief Compute vector potential A and magnetic field B = curl(A)
 !>@details
+!!  Built to be called from Python via ctypes
 !!
-!! Wrapper function designed to be called like a C function from
-!! IDL
-!!
-!>@param[in] argc         Number of arguments
-!>@param[in] argv_cptr    Void C pointer to arguments 
+!
+!>@param[in]     nsize:   Total number of points in B: nx*ny*nz*3 
+!>@param[in]     nshape4: Shape of B: (nx,ny,nx,3)
+!>@param[inout]  ioptc:   Integer-value options 
+!>@parama[inout] ropt:    Real-valued options
+!>@param[in]     x: Mesh vector x, size nx 
+!>@param[in]     y: Mesh vector y, size ny 
+!>@param[in]     z: Mesh vector z, size nz  
+!>@param[out]    A: Vector potential, (nx,ny,nz,3)
+!>@param[inout]  B: Magnetic field, (nx,ny,nz,3)
 !
 !
 FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ierr)
