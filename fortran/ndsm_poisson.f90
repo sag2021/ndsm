@@ -83,7 +83,7 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
   ! LOCAL
   INTEGER(IT)                   :: i
   LOGICAL                       :: converged
-  REAL(FP)                      :: du
+  REAL(FP)                      :: du,du_max,du_mean
   REAL(FP),DIMENSION(:),POINTER :: u_p,rhs_p
   INTEGER(IT),PARAMETER         :: i1 = 1
   CHARACTER(LEN=32)             :: du_string
@@ -119,7 +119,14 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
     CALL v_cycle(bvp,i1,ndsm_relax_wrapper,ndsm_residual_wrapper)
 
     ! Update and compute difference
-    CALL update_u(nsize,u_p,u,du_max=du)
+    CALL update_u(nsize,u_p,u,du_max=du_max,du_mean=du_mean)
+   
+    ! Pick convergence metric
+    IF(bvp%du_max) THEN
+      du = du_max
+    ELSE
+      du = du_mean
+    ENDIF
 
     ! Print change in solution
     WRITE(du_string,"(ES12.4)") du

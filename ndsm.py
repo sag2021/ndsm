@@ -63,7 +63,7 @@ def get_lib_path(libname):
 
 # ---------------------------------------------------------------------
 
-def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,libname="ndsmf.so",libpath=None,debug=False):
+def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mean=False,libname="ndsmf.so",libpath=None,debug=False):
   """
 
     For multigrid, it is necessary to compute an "exact" solution on the 
@@ -103,6 +103,9 @@ def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,lib
       debug: bool
         Debug flag. If set, the Fortran code will print more 
         information 
+      mean: bool
+        Use mean difference as the metric to measure change in solution
+        rather than the max
 
     Returns:
     --------
@@ -165,6 +168,7 @@ def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,lib
   iopt_ctol    = libc.get_ropt_ctol()
   iopt_vtol    = libc.get_ropt_vtol()
   iopt_debug   = libc.get_iopt_debug()
+  iopt_dumax   = libc.get_iopt_dumax()
   
   # Check bounds. This shouldn't occur in normal function. Only 
   # an bug in the Fortran lib should cause this
@@ -180,9 +184,16 @@ def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,lib
 
   # Debug flag
   if(debug):
-    ioptc[iopt_debug] = 1           
+    ioptc[iopt_debug] = libc.get_iopt_true()          
   else:
-    ioptc[iopt_debug] = 0
+    ioptc[iopt_debug] = libc.get_iopt_false()     
+
+  # If mean flag is set, then set dumax to false
+  if(mean):
+    ioptc[iopt_dumax] = libc.get_iopt_false()
+  else:
+    ioptc[iopt_dumax] = libc.get_iopt_true()
+                
 
   # Data arrays
   Apot = np.zeros(b.size,dtype=np.float64)  

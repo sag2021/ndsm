@@ -95,7 +95,7 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   iopt   = ioptc
 
   ! Set debug flag 
-  DEBUG = (iopt(IOPT_DEBUG) == 1)
+  DEBUG = (iopt(IOPT_DEBUG) == IOPT_TRUE)
 
   ! Start
   tstart = get_cpu_time()
@@ -150,6 +150,9 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   ! Copy out
   ioptc = iopt
 
+  ! Set error
+  ierr = iopt(IOPT_IERR)
+
   IF(DEBUG) CALL debug_msg(THIS_SUB,"Exiting Fortran lib...")
     
 END FUNCTION
@@ -186,6 +189,24 @@ FUNCTION get_iopt_debug() BIND(C) RESULT(val)
   IMPLICIT NONE
   INTEGER(C_INT) :: val
   val = IOPT_DEBUG
+END FUNCTION
+
+FUNCTION get_iopt_dumax() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_DUMAX
+END FUNCTION
+
+FUNCTION get_iopt_true() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_TRUE
+END FUNCTION
+
+FUNCTION get_iopt_false() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_FALSE
 END FUNCTION
 
 FUNCTION get_ropt_tim() BIND(C) RESULT(val)
