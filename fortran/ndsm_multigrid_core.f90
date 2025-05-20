@@ -96,7 +96,8 @@ MODULE NDSM_MULTIGRID_CORE
     INTEGER(IT)     ,DIMENSION(MG_OPT_LEN)  :: iopt          !< User-defined integer options
     REAL(FP)        ,DIMENSION(MG_OPT_LEN)  :: ropt          !< User-defined real options
     CHARACTER(LEN=1),DIMENSION(MG_OPT_LEN)  :: copt          !< User-defined character options
-  ENDTYPE
+    LOGICAL                                 :: du_max        !< Use max as convergence metric
+  END TYPE
   
   !
   ! Abstract interfaces for relaxation and residual operators
@@ -160,7 +161,7 @@ MODULE NDSM_MULTIGRID_CORE
 !! Does not initialize iopt,ropt,copt. These are user defined.
 !!
 !
-SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh)
+SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max)
 
   IMPLICIT NONE
   
@@ -169,6 +170,7 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh)
   INTEGER(IT)                 ,INTENT(IN) :: ngrids
   INTEGER(IT),DIMENSION(ndim) ,INTENT(IN) :: nshape
   TYPE(MG_PTR),DIMENSION(ndim),INTENT(IN) :: mesh
+  LOGICAL                     ,INTENT(IN) :: du_max
   
   ! OUTPUT
   TYPE(MG_HANDLE),INTENT(OUT) :: this
@@ -180,6 +182,9 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh)
   ! LOCAL PARAM.
   REAL(FP),PARAMETER :: inv2 = REAL(1,FP)/REAL(2,FP) ! 1/2
     
+  ! Set conv. flag
+  this%du_max = du_max
+
   ! Set total number of grids
   this%ngrids = ngrids
   

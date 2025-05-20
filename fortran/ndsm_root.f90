@@ -60,6 +60,9 @@ MODULE NDSM_ROOT
   ! Default INT
   INTEGER,PARAMETER :: IT = C_INT64_T
 
+  ! For debug
+  LOGICAL :: debug
+
   ! ====================
   ! DEFINE: PTR_TO_ARRAY
   ! ====================
@@ -479,6 +482,23 @@ SUBROUTINE error_msg(msg,sub,eid)
   CHARACTER(LEN=*),INTENT(IN) :: msg,sub,eid
 
   WRITE(ERROR_UNIT,'(A)') "ERROR("//TRIM(sub)//"):"//TRIM(msg)//":"//TRIM(eid)
+
+END SUBROUTINE
+
+! ---------------------------------------------------------------------
+!
+!>@name debug_msg
+!>@brief Standard format for debug message
+
+SUBROUTINE debug_msg(sub,msg)
+
+  USE, INTRINSIC :: ISO_FORTRAN_ENV,ONLY: ERROR_UNIT
+
+  IMPLICIT NONE
+
+  CHARACTER(LEN=*),INTENT(IN) :: sub,msg
+
+  WRITE(ERROR_UNIT,'(A)') "DEBUG("//TRIM(sub)//"):"//TRIM(msg)
 
 END SUBROUTINE
 

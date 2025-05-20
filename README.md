@@ -33,6 +33,64 @@ the Coulomb gauge is not necessarily unique when the boundary conditions are on 
 of the magnetic field. The NDSM code makes a particular choice in resolving this ambiguity. See
 the paper and the notes for more details. 
 
+# Convergence 
+
+The multigrid method arrives at a solution via iteration. 
+When convergence is poor, the output of the code may not accurately represent the 
+solution to the underlying boundary-value problem (see ndsm_notes.pdf for details of the BVP). 
+This has several consequences. Firstly, the magnetic field may not be a potential field, and significant electric 
+currents may exist within the volume. Secondly, the normal component of the magnetic 
+field may not match the normal component specified as boundary conditions.
+
+## Metric
+
+Two metrics are available for measuring the convergence of the solution: 
+the max or mean difference between iterations. By default, the max is used. 
+
+The max is sensitive to failure of convergence at any point, and therefore may be inappropriate
+for many practical problems, but is useful for testing. The mean is a 
+more robust convergence metric and may be more appropriate for practical problems. 
+
+Setting mean=True, will use the mean rather than the max. 
+
+## Tolerances
+
+The code has two tolerance parameters that determine when to stop
+iterating. 
+
+### vc\_tol
+
+The V cycle iteration stops when the max/mean difference is less than
+vc\_tol. If vc\_tol is large, the code may return quickly, but the solution
+may not be an accurate solution of the BVP.
+
+### ex\_tol
+
+The multrigrid method requires solution of a BVP on the coarsest mesh. 
+This is solved via relaxation. The relaxation stops when the change in 
+solution is less than ex_tol. Setting this to a large value will
+result in inefficient V cycles, because the BVP is not being accurately
+solved at each V cycle iteration.
+
+### Choice of vc\_tol and ex\_tol
+
+When testing the code on analytic solutions, both vc\_tol and ex\_tol
+can be set to very small values. The default values defined in ndsm.py 
+reflect values used for testing.
+
+For some practical problems, the change in solution between iterations
+may never reach the desired value of vc_tol: the solution is not improving
+with additional V cycles. In this case, the iteration
+will run until ncycles\_max is reached. This may take a long time 
+depending on how ncycles\_max is chosen. A warning will be printed 
+if the code returns without achieving vc\_tol. 
+
+Setting a large value for vc\_tol (and ex\_tol) may prevent the 
+code from running to ncycles\_max, but a large value of vc\_tol
+in particular will mean the solutions is poorly converged: the numerical
+solution is not an accurate solution of the underlying boundary-value problem.
+
+
 # Compile shared library
 
 The core Fortran code builds a shared library. 

@@ -35,22 +35,30 @@ MODULE NDSM_PYTHON_WRAPPER
 
 ! ---------------------------------------------------------------------
 !
-!>@name ndsm_vector
+!>@name ndsm_vector_solve
 !
-!>@brief Computes vector potential and B = curl(A)
-!
+!>@brief Compute vector potential A and magnetic field B = curl(A)
 !>@details
+!!  Built to be called from Python via ctypes
 !!
-!! Wrapper function designed to be called like a C function from
-!! IDL
-!!
-!>@param[in] argc         Number of arguments
-!>@param[in] argv_cptr    Void C pointer to arguments 
+!
+!>@param[in]     nsize:   Total number of points in B: nx*ny*nz*3 
+!>@param[in]     nshape4: Shape of B: (nx,ny,nx,3)
+!>@param[inout]  ioptc:   Integer-value options 
+!>@parama[inout] ropt:    Real-valued options
+!>@param[in]     x: Mesh vector x, size nx 
+!>@param[in]     y: Mesh vector y, size ny 
+!>@param[in]     z: Mesh vector z, size nz  
+!>@param[out]    A: Vector potential, (nx,ny,nz,3)
+!>@param[inout]  B: Magnetic field, (nx,ny,nz,3)
 !
 !
 FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ierr)
 
   IMPLICIT NONE
+
+  ! NAME
+  CHARACTER(LEN=*),PARAMETER :: THIS_SUB = "ndsm_vector_solve"
 
   ! INPUT
   INTEGER(C_SIZE_T),VALUE                         :: nsize
@@ -60,9 +68,9 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   REAL(C_DOUBLE),DIMENSION(nshape4(3)),INTENT(IN) :: z
 
   ! INPUT/OUTPUT
-  INTEGER(C_INT),DIMENSION(IOPT_LEN),INTENT(INOUT) :: ioptc
-  REAL(C_DOUBLE),DIMENSION(IOPT_LEN),INTENT(INOUT) :: ropt
-  REAL(C_DOUBLE),DIMENSION(nsize)   ,INTENT(INOUT) :: b
+  INTEGER(C_INT),DIMENSION(0:IOPT_LEN-1),INTENT(INOUT) :: ioptc
+  REAL(C_DOUBLE),DIMENSION(0:IOPT_LEN-1),INTENT(INOUT) :: ropt
+  REAL(C_DOUBLE),DIMENSION(nsize)       ,INTENT(INOUT) :: b
   
   ! OUTPUT
   REAL(FP),DIMENSION(nsize),INTENT(OUT) :: A
@@ -74,7 +82,7 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   REAL(FP)                  :: tend,tstart
   TYPE(MG_PTR),DIMENSION(3) :: mesh
   !REAL(FP)                  :: dq
-  INTEGER(IT)               :: iopt(IOPT_LEN)
+  INTEGER(IT)               :: iopt(0:IOPT_LEN-1)
   
   ! SHAPE
   INTEGER(IT),DIMENSION(4) :: nshape
@@ -85,6 +93,9 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   ! Copy in 
   nshape = nshape4
   iopt   = ioptc
+
+  ! Set debug flag 
+  DEBUG = (iopt(IOPT_DEBUG) == IOPT_TRUE)
 
   ! Start
   tstart = get_cpu_time()
@@ -98,6 +109,7 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   !dq = REAL(1,FP)/(nshape(1)-REAL(1,FP))
     
   ! Allocate memory
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Allocating memory for mesh...")
   DO i=1,SIZE(mesh)
     ALLOCATE(mesh(i)%val(nshape(i)))
   ENDDO
@@ -113,16 +125,18 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   !
   ! Call NDSM vector potential subroutine
   !
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Calling compute_vector_potential...")
   CALL compute_vector_potential(nshape,iopt,ropt,mesh,A,B)
     
-  ! Check for generic error
-  ierr = iopt(IOPT_IERR)
+  ! Check for generic error,
+  !ierr = iopt(IOPT_IERR)
   
   ! =============
   ! MEMORY FREE
   ! ============
     
   ! Free mesh
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Deallocating memory for mesh...")
   DO i=1,SIZE(mesh)
     DEALLOCATE(mesh(i)%val)
   ENDDO
@@ -135,6 +149,11 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
 
   ! Copy out
   ioptc = iopt
+
+  ! Set error
+  ierr = iopt(IOPT_IERR)
+
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Exiting Fortran lib...")
     
 END FUNCTION
 
@@ -164,6 +183,30 @@ FUNCTION get_iopt_ncycles() BIND(C) RESULT(val)
   IMPLICIT NONE
   INTEGER(C_INT) :: val
   val = IOPT_NCYCLES
+END FUNCTION
+
+FUNCTION get_iopt_debug() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_DEBUG
+END FUNCTION
+
+FUNCTION get_iopt_dumax() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_DUMAX
+END FUNCTION
+
+FUNCTION get_iopt_true() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_TRUE
+END FUNCTION
+
+FUNCTION get_iopt_false() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_FALSE
 END FUNCTION
 
 FUNCTION get_ropt_tim() BIND(C) RESULT(val)

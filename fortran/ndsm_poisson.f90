@@ -64,6 +64,9 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
 
   IMPLICIT NONE
   
+  ! SUBNAME
+  CHARACTER(LEN=*),PARAMETER :: THIS_SUB="solve_poisson_bvp"
+
   ! INPUT
   INTEGER(IT),INTENT(IN) :: nsize
   REAL(FP)   ,INTENT(IN) :: vc_tol
@@ -80,11 +83,11 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
   ! LOCAL
   INTEGER(IT)                   :: i
   LOGICAL                       :: converged
-  REAL(FP)                      :: du
+  REAL(FP)                      :: du,du_max,du_mean
   REAL(FP),DIMENSION(:),POINTER :: u_p,rhs_p
   INTEGER(IT),PARAMETER         :: i1 = 1
+  CHARACTER(LEN=32)             :: du_string
 
-  
   ! Allocate memory for finest mesh
   IF(.NOT.ALLOCATED(bvp%u(1)%val  )) ALLOCATE(bvp%u(1)%val(nsize))
   IF(.NOT.ALLOCATED(bvp%rhs(1)%val)) ALLOCATE(bvp%rhs(1)%val(nsize))
@@ -109,13 +112,25 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
   !
   ! Perform multigrid V cycles until convergence
   !
+  IF(DEBUG) CALL debug_msg(THIS_SUB,"Performing V cycles...")
   VCYCLE_LOOP : DO i=1,nmax
 
     ! Do V cycle
     CALL v_cycle(bvp,i1,ndsm_relax_wrapper,ndsm_residual_wrapper)
 
     ! Update and compute difference
-    CALL update_u(nsize,u_p,u,du_max=du)
+    CALL update_u(nsize,u_p,u,du_max=du_max,du_mean=du_mean)
+   
+    ! Pick convergence metric
+    IF(bvp%du_max) THEN
+      du = du_max
+    ELSE
+      du = du_mean
+    ENDIF
+
+    ! Print change in solution
+    WRITE(du_string,"(ES12.4)") du
+    IF(DEBUG) CALL debug_msg(THIS_SUB,"Solution delta: "//TRIM(du_string))
 
     ! Exit loop if converged
     IF(du < vc_tol) THEN
