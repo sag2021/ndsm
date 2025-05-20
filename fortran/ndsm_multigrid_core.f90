@@ -737,6 +737,8 @@ SUBROUTINE solve_exact(this,grid_id,relax)
   REAL(FP),DIMENSION(:),ALLOCATABLE :: u_sav
   INTEGER(IT) :: i,nsize
   INTEGER(IT) :: nsteps
+  REAL(FP) :: metrics(2)
+  LOGICAL  :: converged 
   
   ! Get size 
   nsize = this%nsize(grid_id)
@@ -750,8 +752,10 @@ SUBROUTINE solve_exact(this,grid_id,relax)
   CALL zero(u_sav,nsize)
 
   ! Initially, set the change to a large value  
-  du = HUGE(REAL(1,FP))
+  converged = .FALSE. 
+  du        = HUGE(REAL(1,FP))
     
+
   !
   ! Solve exactly using the relaxation operator
   !
@@ -759,13 +763,23 @@ SUBROUTINE solve_exact(this,grid_id,relax)
   SOLVE_LOOP : DO     
  
     ! Leave loop if the change is below ex_tol
-    IF(du .le. this%ex_tol) EXIT SOLVE_LOOP
+    IF(du .le. this%ex_tol) THEN
+      converged = .TRUE.
+      EXIT SOLVE_LOOP
+    ENDIF
 
     ! Perform relaxation
     CALL relax(this,grid_id,ue,fe)
  
-    ! Compute maximum change in the solution
-    du = du_max(u_sav,ue)
+    ! Compute maximum change in the solution [max,mean]
+    metrics = du_metrics(u_sav,ue)
+
+    ! Use max/mean depending on value
+    IF(this%du_max) THEN
+      du = metrics(1)
+    ELSE
+      du = metrics(2)
+    ENDIF
           
     ! Save previous iteration 
     CALL copy(u_sav,ue)  
@@ -782,7 +796,7 @@ END SUBROUTINE
 !
 !>@brief Return max difference between u1 and u2 
 !
-FUNCTION du_max(u1,u2)
+FUNCTION du_metrics(u1,u2)
 
   IMPLICIT NONE
   
@@ -790,34 +804,42 @@ FUNCTION du_max(u1,u2)
   REAL(FP),DIMENSION(:),INTENT(IN) :: u1,u2
   
   ! RETURN VALUE 
-  REAL(FP) :: du_max
+  REAL(FP) :: du_metrics(2)
   
   ! LOCAL
   INTEGER(IT) :: i,nsize
-  REAL(FP)    :: du_thread,du_i
+  REAL(FP)    :: du_i,du_sum,du_mean,du_max
   
   ! Get size
   nsize = SIZE(u1)
   
   ! Initialise to zero
-  du_thread = 0
+  du_max = 0
+  du_sum = 0
   
   ! Determine max in parallel 
   !$OMP  PARALLEL DO PRIVATE(i,du_i) &
-  !$OMP& REDUCTION(max:du_thread) 
+  !$OMP& REDUCTION(max:du_max)    & 
+  !$OMP& REDUCTION(+:du_sum)
   DO i=1,nsize
   
     ! Determine difference at point i
     du_i = ABS(u1(i) - u2(i))
         
     ! Update max 
-    du_thread = MAX(du_thread,du_i)
+    du_max = MAX(du_max,du_i)
+    
+    ! Update mean
+    du_sum = du_sum + du_i
 
   ENDDO
   !$OMP END PARALLEL DO 
   
+  ! Convert to mean
+  du_mean = du_sum/REAL(nsize,FP)
+
   ! Return value
-  du_max = du_thread
+  du_metrics = [du_max,du_mean]
   
 END FUNCTION
 
