@@ -45,6 +45,7 @@ MODULE NDSM_VECTOR_POTENTIAL
   INTEGER,PUBLIC,PARAMETER :: IOPT_FLXCRL  = 4     !< Order in which flux correction is applied
   INTEGER,PUBLIC,PARAMETER :: IOPT_DEBUG   = 5     !< Prints more information when running
   INTEGER,PUBLIC,PARAMETER :: IOPT_DUMAX   = 6     !< If set, use max change as convergence metric
+  INTEGER,PUBLIC,PARAMETER :: IOPT_NMAXEX  = 7     !< Max. iterations for exact solution 
   INTEGER,PUBLIC,PARAMETER :: IOPT_TRUE    = 1
   INTEGER,PUBLIC,PARAMETER :: IOPT_FALSE   = 0
 
@@ -348,7 +349,7 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
         
     ! Construct new 2D handle
     ndim = 2    
-    CALL new_mg_handle(bvp,ndim,nshape_bn(:,i),ngrids,mesh_bn(:,i),USE_DU_MAX)
+    CALL new_mg_handle(bvp,ndim,nshape_bn(:,i),ngrids,mesh_bn(:,i),USE_DU_MAX,iopt(IOPT_NMAXEX))
     
     ! Set option values
     bvp%ms                = IOPT(IOPT_MS  )  ! Smoothing sweeps
@@ -551,7 +552,7 @@ SUBROUTINE solve_6faces(cdim,ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   IF(cdim == 5) CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,1),At(1,5)%val,dir=-i1)
   IF(cdim == 6) CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,1),At(1,6)%val,dir=-i1)
     
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX)
+  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms                = IOPT(IOPT_MS)
   bvp%ex_tol            = coarse_tol
   bvp%copt(1:6)         = ["N","D","D","N","D","D"]  
@@ -567,7 +568,7 @@ SUBROUTINE solve_6faces(cdim,ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   IF(cdim == 5) CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,2),At(2,5)%val,dir=-i1)
   IF(cdim == 6) CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,2),At(2,6)%val,dir=-i1)
   
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX)
+  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms         = IOPT(IOPT_MS)
   bvp%ex_tol     = coarse_tol
   bvp%copt(1:6)  = ["D","N","D","D","N","D"]  
@@ -583,7 +584,7 @@ SUBROUTINE solve_6faces(cdim,ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   IF(cdim == 3) CALL extract_bn(nsize_bn(3),nshape(:3),i2,i1       ,Ac(:,:,:,3),At(2,3)%val,dir=-i1)
   IF(cdim == 4) CALL extract_bn(nsize_bn(4),nshape(:3),i2,nshape(2),Ac(:,:,:,3),At(2,4)%val,dir=-i1)
   
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX)
+  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms                = 5
   bvp%ex_tol            = coarse_tol
   bvp%copt(1:6)         = ["D","D","N","D","D","N"]  
@@ -648,7 +649,7 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,1),At(1,5)%val,dir=-i1)
   CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,1),At(1,6)%val,dir=-i1)
     
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX)
+  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms                = IOPT(IOPT_MS)
   bvp%ex_tol            = coarse_tol
   bvp%copt(1:6)         = ["N","D","D","N","D","D"]  
@@ -664,7 +665,7 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,2),At(2,5)%val,dir=-i1)
   CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,2),At(2,6)%val,dir=-i1)
   
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX)
+  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms         = IOPT(IOPT_MS)
   bvp%ex_tol     = coarse_tol
   bvp%copt(1:6)  = ["D","N","D","D","N","D"]  
@@ -680,7 +681,7 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   CALL extract_bn(nsize_bn(3),nshape(:3),i2,i1       ,Ac(:,:,:,3),At(2,3)%val,dir=-i1)
   CALL extract_bn(nsize_bn(4),nshape(:3),i2,nshape(2),Ac(:,:,:,3),At(2,4)%val,dir=-i1)
   
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX)
+  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms                = 5
   bvp%ex_tol            = coarse_tol
   bvp%copt(1:6)         = ["D","D","N","D","D","N"]  

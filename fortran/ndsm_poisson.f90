@@ -146,7 +146,7 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
   ! Warn the user if the V-cycle did not converge
   IF(.NOT.converged) THEN
     ierr = IERR_POISSON_COVFAIL
-    PRINT *,"Warning: NMAX exceeded. V-cycle iteration may not have converged"
+    PRINT *,"Warning: IOPT_NCYCLES exceeded. V-cycle iteration may not have converged"
   ENDIF
    
   ! Copy out

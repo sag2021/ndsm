@@ -197,6 +197,12 @@ FUNCTION get_iopt_dumax() BIND(C) RESULT(val)
   val = IOPT_DUMAX
 END FUNCTION
 
+FUNCTION get_iopt_iopt_nmaxex() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val
+  val = IOPT_NMAXEX
+END FUNCTION
+
 FUNCTION get_iopt_true() BIND(C) RESULT(val)
   IMPLICIT NONE
   INTEGER(C_INT) :: val

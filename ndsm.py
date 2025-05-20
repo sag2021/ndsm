@@ -63,7 +63,7 @@ def get_lib_path(libname):
 
 # ---------------------------------------------------------------------
 
-def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mean=False,libname="ndsmf.so",libpath=None,debug=False):
+def vector_potential(x,y,z,b,niterex_max=10000,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mean=False,libname="ndsmf.so",libpath=None,debug=False):
   """
 
     For multigrid, it is necessary to compute an "exact" solution on the 
@@ -91,6 +91,8 @@ def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mea
       ms: int 
         Number of relaxation sweeps to perform before and after 
         interpolation/restriction. This should be a small number. 
+      niterex_max: int
+        Max. number of iterations used fot exact solution 
       ncycles_max: int
         Max. number of V cycles. Algorithm will stop at this many
         cycles and return a not converged flag
@@ -169,6 +171,7 @@ def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mea
   iopt_vtol    = libc.get_ropt_vtol()
   iopt_debug   = libc.get_iopt_debug()
   iopt_dumax   = libc.get_iopt_dumax()
+  iopt_nmaxex  = libc.get_iopt_iopt_nmaxex()
   
   # Check bounds. This shouldn't occur in normal function. Only 
   # an bug in the Fortran lib should cause this
@@ -179,6 +182,7 @@ def vector_potential(x,y,z,b,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mea
   # Set options
   ioptc[iopt_ms]      = ms           # Smoothing steps
   ioptc[iopt_ncycles] = ncycles_max  # Max. V cycles
+  ioptc[iopt_nmaxex]  = niterex_max  # Max. iterations for exact solution
   ropt[iopt_vtol]     = vc_tol       # V cycle tol
   ropt[iopt_ctol]     = ex_tol       # Tol. course
 

@@ -97,6 +97,7 @@ MODULE NDSM_MULTIGRID_CORE
     REAL(FP)        ,DIMENSION(MG_OPT_LEN)  :: ropt          !< User-defined real options
     CHARACTER(LEN=1),DIMENSION(MG_OPT_LEN)  :: copt          !< User-defined character options
     LOGICAL                                 :: du_max        !< Use max as convergence metric
+    INTEGER(IT)                             :: nmax_exact    !< Max. number of iterations on exact solution
   END TYPE
   
   !
@@ -161,7 +162,7 @@ MODULE NDSM_MULTIGRID_CORE
 !! Does not initialize iopt,ropt,copt. These are user defined.
 !!
 !
-SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max)
+SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max,nmax_exact)
 
   IMPLICIT NONE
   
@@ -171,6 +172,7 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max)
   INTEGER(IT),DIMENSION(ndim) ,INTENT(IN) :: nshape
   TYPE(MG_PTR),DIMENSION(ndim),INTENT(IN) :: mesh
   LOGICAL                     ,INTENT(IN) :: du_max
+  INTEGER(IT)                 ,INTENT(IN) :: nmax_exact
   
   ! OUTPUT
   TYPE(MG_HANDLE),INTENT(OUT) :: this
@@ -184,6 +186,9 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max)
     
   ! Set conv. flag
   this%du_max = du_max
+
+  ! Set max. iterations
+  this%nmax_exact = nmax_exact
 
   ! Set total number of grids
   this%ngrids = ngrids
@@ -760,7 +765,7 @@ SUBROUTINE solve_exact(this,grid_id,relax)
   ! Solve exactly using the relaxation operator
   !
   nsteps = 0
-  SOLVE_LOOP : DO     
+  SOLVE_LOOP : DO i=1,this%nmax_exact
  
     ! Leave loop if the change is below ex_tol
     IF(du .le. this%ex_tol) THEN
@@ -788,6 +793,10 @@ SUBROUTINE solve_exact(this,grid_id,relax)
     
   ENDDO SOLVE_LOOP
     
+  IF(.NOT.converged) THEN
+    PRINT *,"Warning: IOPT_NMAXEX exceeded. Coarse-mesh solution may not have converged"
+  ENDIF
+
 END SUBROUTINE
 
 ! ----------------------------------------------------------------------
