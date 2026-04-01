@@ -75,7 +75,8 @@ MODULE NDSM_VECTOR_POTENTIAL
   !          whether the boundary is an upper or lower boundary, e.g.
   !          imap_ul(6) = 2 because ID:6 is the top boundary
   !
-  ! imap_nc: 
+  ! imap_nc: Maps boundary ID to pair of indices that define local 
+  !          tangent directions in given boundary  
   !
   !
   INTEGER(IT),DIMENSION(6)  ,PARAMETER :: imap_ul = [1,2,1,2,1,2]                                !< Upper-lower map
@@ -188,6 +189,7 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   INTEGER(IT) :: lb,ndim,ngrids,nmin,nsize,ierr
   INTEGER(IT),PARAMETER :: i1 = 1
   LOGICAL :: USE_DU_MAX 
+  REAL(FP) :: dq1,dq2
 
 
   ! Conv. flag 
@@ -296,13 +298,20 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ! COMPUTE FLUXES
   ! ==============
  
-  ! Compute fluxes 
+  ! Compute fluxes
   DO i=1,SIZE(phi_b)
+  
+    ! Mesh spacing in boundary
+    dq1 = dq(imap_nc(1,i))
+    dq2 = dq(imap_nc(2,i))
+    
+    ! Compute flux   
     phi_b(i) = trapz_2D(nshape_bn(1,i), &
                         nshape_bn(2,i), &
-                        dq(1),          &
-                        dq(2),          & 
+                        dq1,            &
+                        dq2,            & 
                         bn(i)%val)
+
   ENDDO
 
   ! ====================
@@ -393,8 +402,14 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     ! Maps to component
     j = imap_cp(i)
     
+    ! Mesh spacing in direction 1, 2 on particular boundary
+    ! dq1 change in coordinate in tvec1 direction
+    ! dq2 change in coordinate in tvec2 direction 
+    dq1 = dq(imap_nc(1,i))
+    dq2 = dq(imap_nc(2,i))
+    
     ! Compute At at each boundary
-    CALL  compute_At_bcs(nshape_bn(:,i),chi(i)%val,dq(j)      ,tvecs1(:,i), &
+    CALL  compute_At_bcs(nshape_bn(:,i),chi(i)%val,dq1,dq2      ,tvecs1(:,i), &
                          tvecs2(:,i)   ,nvecs(:,i),At(1,i)%val,At(2,i)%val)    
   ENDDO
 
@@ -974,27 +989,28 @@ END SUBROUTINE
 !>@param[in]  nvec    Nornaml vector at boundary: nvec = tvec1 x tvec2
 !
 !
-SUBROUTINE compute_At_bcs(nshape,chi,dq,tvec1,tvec2,nvec,At1,At2)
+SUBROUTINE compute_At_bcs(nshape,chi,dq1,dq2,tvec1,tvec2,nvec,At1,At2)
 
   IMPLICIT NONE 
 
   ! INPUT
   INTEGER(IT),DIMENSION(2)                  ,INTENT(IN) :: nshape
   REAL(FP)   ,DIMENSION(nshape(1),nshape(2)),INTENT(IN) :: chi
-  REAL(FP)                                  ,INTENT(IN) :: dq
+  REAL(FP)                                  ,INTENT(IN) :: dq1,dq2
   REAL(FP)   ,DIMENSION(3)                  ,INTENT(IN) :: tvec1,tvec2,nvec
   
   ! OUTPUT
   REAL(FP),DIMENSION(nshape(1),nshape(2)),INTENT(OUT) :: At1,At2
   
   ! LOCAL
-  REAL(FP)              :: fac,dchi_dq1,dchi_dq2
+  REAL(FP)              :: mesh_vec(2),dchi_dq1,dchi_dq2
   REAL(FP),DIMENSION(3) :: grad_cross_n
   INTEGER(IT)           :: i,j,k,nq1,nq2
+  REAL(FP),PARAMETER    :: inv2 = REAL(1,FP)/REAL(2,FP)
 
   ! Compute spacing factor 
-  fac = REAL(1,DP)/(REAL(2,DP)*dq)
-  
+  mesh_vec = inv2/[dq1,dq2]
+    
   ! Get size
   nq1 = SIZE(At1,1)
   nq2 = SIZE(At1,2)
@@ -1003,17 +1019,18 @@ SUBROUTINE compute_At_bcs(nshape,chi,dq,tvec1,tvec2,nvec,At1,At2)
   DO j=1,nq2
     DO i=1,nq1
     
-      ! Regular gradient 
-      IF((i==1).OR. (i==nq1)) THEN
+      ! Regular gradient in direction tvec1 
+      IF((i==1) .OR. (i==nq1)) THEN
         dchi_dq1 = 0
       ELSE
-        dchi_dq1 = fac*(chi(i+1,j)-chi(i-1,j))
+        dchi_dq1 = mesh_vec(1)*(chi(i+1,j)-chi(i-1,j))
       ENDIF
       
+      ! Regular gardient in direction tvec2
       IF((j==1).OR. (j==nq2)) THEN
         dchi_dq2 = 0
       ELSE
-        dchi_dq2 = fac*(chi(i,j+1)-chi(i,j-1))        
+        dchi_dq2 = mesh_vec(2)*(chi(i,j+1)-chi(i,j-1))        
       ENDIF
     
       ! Compute grad(chi) x n
