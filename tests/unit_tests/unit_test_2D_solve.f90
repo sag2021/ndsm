@@ -156,6 +156,7 @@ SUBROUTINE solve_test_case(nshape,max_vcycles,ex_tol,Lx,res,ierr,filedump)
   REAL(FP)        :: du_last,mean_ue
   REAL(FP)        :: E_avg,E_max
   INTEGER(IT)     :: ngrids
+  INTEGER(IT),PARAMETER :: nmax_exact = 1e6
 
   ! Alias
   REAL(FP),DIMENSION(:),POINTER :: x,y
@@ -199,7 +200,7 @@ SUBROUTINE solve_test_case(nshape,max_vcycles,ex_tol,Lx,res,ierr,filedump)
   ngrids = FLOOR(LOG(nmin/BASE_GRID)/LOG(REAL(2,FP)))
 
   ! New handle
-  CALL new_mg_handle(bvp,ndim,nshape,ngrids,mesh)
+  CALL new_mg_handle(bvp,ndim,nshape,ngrids,mesh,.TRUE.,nmax_exact)
 
   ! Set values
   bvp%ms        = 5
