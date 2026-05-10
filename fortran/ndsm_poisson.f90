@@ -337,7 +337,7 @@ SUBROUTINE residual(ndim,nsize,nshape,qvecs,bcs,u,rhs,r)
     
         ! Strides
         dn = 0
-        CALL stencil_stride(ndim,bmask,nstrides,i,dn)
+        CALL stencil_stride(ndim,nshape,bmask,nstrides,i,bcs(i,:),dn)
         
         ! Apply stencil
         laplace_u = laplace_u + (u(n+dn(1)) - 2*u(n) + u(n+dn(2)))*wc(i) 
@@ -531,7 +531,7 @@ SUBROUTINE relax(ndim,nsize,nshape,qvecs,bcs,u,rhs)
   !
   ! For pure Neumann problems, the mean must be subtracted off
   !  
-  IF(ALL(bcs == "N")) THEN
+  IF(.NOT. ALL(bcs == "D")) THEN
 
     ! Compute mean
     u_mean = mean(nsize,u)
@@ -607,7 +607,7 @@ FUNCTION relax_stencil_update(ndim,nsize,nshape,nstrides,bcs,wc,n,u,rhs) RESULT(
     ! then the change is reversed to enforce the homogeneous
     ! Neumann condtion 
     !
-    CALL stencil_stride(ndim,bmask,nstrides,i,dn)
+    CALL stencil_stride(ndim,nshape,bmask,nstrides,i,bcs(i,:),dn)
                                   
     ! Add to summation    
     u_new = u_new + u(n+dn(1))*wc(i) + u(n+dn(2))*wc(i)
@@ -626,17 +626,21 @@ END FUNCTION
 !
 !>@details
 !!
-!!  Compute linear stride for stencil. Enforces homogenous
-!!  Neumann boundary conditions at boundaries
+!!  Compute linear stride for stencil. Enforces either homogeneous
+!!  Neumann boundary conditions or periodic boundary conditions
+!!  depending on bcs. In principle, the upper and lower boundary
+!!  can have different boundary flags, i.e. lower periodic and 
+!!  upper Neumann. This doesn't make sense from a BVP perspective. 
 !!
 
-SUBROUTINE stencil_stride(ndim,bmask,nstrides,i,dn)
+SUBROUTINE stencil_stride(ndim,nshape,bmask,nstrides,i,bcs,dn)
 
   IMPLICIT NONE
 
   ! INPUT
-  INTEGER(IT)                ,INTENT(IN) :: ndim,i
-  INTEGER(IT),DIMENSION(ndim),INTENT(IN) :: bmask,nstrides
+  INTEGER(IT)                  ,INTENT(IN) :: ndim,i
+  INTEGER(IT),DIMENSION(ndim)  ,INTENT(IN) :: bmask,nstrides,nshape
+  CHARACTER(LEN=1),DIMENSION(2),INTENT(IN) :: bcs
 
   ! OUTPUT
   INTEGER(IT),DIMENSION(2),INTENT(OUT) :: dn
@@ -645,12 +649,33 @@ SUBROUTINE stencil_stride(ndim,bmask,nstrides,i,dn)
   INTEGER(IT),DIMENSION(2),PARAMETER :: di = [-1,+1]
   
   SELECT CASE(bmask(i))
+  
+    ! Not at boundary,
     CASE(BND_NONE)
       dn = di*nstrides(i)
+      
+    ! Lower boundary 
     CASE(BND_LOWER)
-      dn = +nstrides(i)
+
+      ! Periodic 
+      IF(bcs(1)=="P") THEN
+        dn(1) = +(nshape(i)-1)*nstrides(i)
+        dn(2) = +nstrides(i)
+      ! Neumann 
+      ELSEIF(bcs(1)=="N") THEN
+         dn = +nstrides(i)         
+      ENDIF
+
+    ! Upper boundary
     CASE(BND_UPPER)
-      dn = -nstrides(i)
+      ! Periodic 
+      IF(bcs(2)=="P") THEN
+        dn(1) = -nstrides(i)  
+        dn(2) = (1-nshape(i))*nstrides(i)
+      ELSEIF(bcs(2)=="N") THEN
+        dn = -nstrides(i)
+      ENDIF
+
     CASE DEFAULT
       STOP "FATAL ERROR: MASK VALUE NOT DEFINED CFV3"
   END SELECT
