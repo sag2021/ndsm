@@ -71,6 +71,7 @@ MODULE NDSM_ROOT
   !
   TYPE :: MG_PTR
     REAL(FP),DIMENSION(:),ALLOCATABLE :: val
+    LOGICAL                           :: periodic = .FALSE.
   END TYPE
 
   !>@name assert_n_inbounds
