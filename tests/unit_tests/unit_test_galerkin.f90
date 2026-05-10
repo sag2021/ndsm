@@ -67,7 +67,7 @@ PROGRAM MAIN
   ! MAIN ARRAY  
   REAL(FP)   ,DIMENSION(:),ALLOCATABLE :: u_c,u_rc,u_f,u_if
   INTEGER(IT),DIMENSION(NDIM)          :: nvec_c,nvec_f
-  INTEGER(IT)                          :: nsize_c,nsize_f
+  !INTEGER(IT)                          :: nsize_c,nsize_f
   
   ! MESH
   TYPE(MG_PTR),DIMENSION(NDIM)     :: mesh_c,mesh_f
@@ -141,7 +141,7 @@ PROGRAM MAIN
   ! Allocate array to hold data at mesh points
   ALLOCATE(u_c(nt_c),u_rc(nt_c))
   ALLOCATE(u_f(nt_f),u_if(nt_f))
-  
+
   ! Populate mesh with original functions
   CALL populate_mesh(ndim,nvec_c,mesh_c,u_c)
   CALL populate_mesh(ndim,nvec_f,mesh_f,u_f)
@@ -160,18 +160,23 @@ PROGRAM MAIN
   
   ENDDO
   
+  ! Need to zero before calling nrestrict
+  u_rc = 0
+  
   ! Create restricted coarse mesh
   PRINT *,"Restricting..."  
-  DO n=1,nt_c
+  DO n=1,nt_f
   
-    ivec = lin2nd(ndim,nvec_c,n)
+    ivec = lin2nd(ndim,nvec_f,n)
     
     DO i=1,NDIM
-      lb    = LBOUND(mesh_c(i)%val,1)
-      q0(i) = mesh_c(i)%val(ivec(i)+lb-1)
+      lb    = LBOUND(mesh_f(i)%val,1)
+      q0(i) = mesh_f(i)%val(ivec(i)+lb-1)
     ENDDO
+
+    CALL nrestrict(ndim,nt_c,nvec_c,mesh_c,mesh_f,q0,u_f(n),u_rc)
     
-    u_rc(n) = nrestrict(ndim,nt_c,nt_f,nvec_c,nvec_f,mesh_c,mesh_f,q0,u_f)
+!    u_rc(n) = nrestrict(ndim,nt_c,nt_f,nvec_c,nvec_f,mesh_c,mesh_f,q0,u_f)
   
   ENDDO
  

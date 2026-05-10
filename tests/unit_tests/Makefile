@@ -15,7 +15,7 @@ SRC     = ndsm_root.f90  ndsm_interp.f90 ndsm_multigrid_core.f90\
 # Object files
 OBJS = $(SRC:.f90=.o) 
 
-all	: unit_test_galerkin.f90 unit_test_interp unit_test_2D_solve
+all	: unit_test_galerkin unit_test_interp unit_test_2D_solve
 
 unit_test_2D_solve  : $(OBJS) unit_test_2D_solve.o 
 	            $(FC) $(OBJS) unit_test_2D_solve.o -o unit_test_2D_solve $(FFLAGS)

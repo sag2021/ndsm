@@ -1027,7 +1027,8 @@ SUBROUTINE mg_restrict(this,id_f,u_f,id_c,u_c)
   INTEGER(IT)                      :: i,n
   INTEGER(IT)                      :: nsize_c,nsize_f
   INTEGER(IT),DIMENSION(this%ndim) :: nshape_c,nshape_f,ivec
-  REAL(FP)   ,DIMENSION(this%ndim) :: q0
+  REAL(FP)   ,DIMENSION(this%ndim) :: q0_f
+  REAL(FP)                         :: uf0
 
   ! Total size
   nsize_c = this%nsize(id_c)
@@ -1040,25 +1041,27 @@ SUBROUTINE mg_restrict(this,id_f,u_f,id_c,u_c)
   ! Zero u_c 
   CALL zero(u_c,nsize_c)
   
-  !$OMP PARALLEL DO PRIVATE(n,i,q0,ivec) 
-  DO n=1,nsize_c
+  !$OMP PARALLEL DO PRIVATE(n,i,uf0,q0_f,ivec) 
+  DO n=1,nsize_f
 
     ! Convert n -> (i1,i2,i3,...)
     !
     ivec = 0
-    ivec = lin2nd(this%ndim,nshape_c,n)
+    ivec = lin2nd(this%ndim,nshape_f,n)
     
     ! Get coordinate at point (ivec)
     DO i=1,this%ndim
-      q0(i) = this%meshes(i,id_c)%val(ivec(i))
+      q0_f(i) = this%meshes(i,id_f)%val(ivec(i))
     ENDDO
+    
+    ! Get value of fine grid at q0
+    uf0 = u_f(n)
+ 
+    CALL nrestrict(this%ndim,nsize_c,nshape_c, &
+                           this%meshes(:,id_c), &
+                           this%meshes(:,id_f), &
+                           q0_f,uf0,u_c)
         
-    ! Perform restriction
-    u_c(n) = nrestrict(this%ndim,nsize_c,nsize_f   , &
-                                nshape_c,nshape_f  , &
-                                this%meshes(:,id_c), &
-                                this%meshes(:,id_f), &
-                                q0,u_f)
   ENDDO
   !$OMP END PARALLEL DO
     

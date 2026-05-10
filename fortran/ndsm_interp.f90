@@ -69,7 +69,7 @@ MODULE NDSM_INTERP
   IMPLICIT NONE
     
  CONTAINS
-
+ 
 ! ---------------------------------------------------------------------
 !
 !>@name ninterp
@@ -102,8 +102,10 @@ FUNCTION ninterp(ndim,nsize,nshape,qvecs,q0,f)
   ! LOCAL
   REAL(FP)    ,DIMENSION(2**ndim) :: fs      !< Number of samples
   INTEGER(IT) ,DIMENSION(ndim,2 ) :: bpts    !< Bracket points
+  REAL(FP)    ,DIMENSION(ndim,2)  :: qimp    !< Implied coordinate 
   REAL(FP)                        :: wh,wl,ql,qh,dq
-  INTEGER(IT)                     :: i,j,nq,NC,ierr,lb
+  INTEGER(IT)                     :: i,j,nq,NC,lb
+  LOGICAL                         :: dimension_is_periodic
 
   ! ASSERT: Check that nsize is consistent with total size implied by nshape
   !
@@ -118,10 +120,11 @@ FUNCTION ninterp(ndim,nsize,nshape,qvecs,q0,f)
   !       instead of bpts directly
   !
   DO i=1,ndim  
-    nq               = SIZE(qvecs(i)%val)
-    CALL find_bracket_points_uniform(qvecs(i)%val,nq,q0(i),bpts(i,1),bpts(i,2),ierr)  
+    nq = SIZE(qvecs(i)%val)
+    dimension_is_periodic = qvecs(i)%periodic
+    CALL find_bracket_points_uniform(dimension_is_periodic,qvecs(i)%val,nq,q0(i),bpts(i,:),qimp(i,:))  
   ENDDO
-  
+    
   ! Compute samples
   CALL get_interpolation_values(ndim,nsize,nshape,bpts,f,fs)
   
@@ -130,9 +133,10 @@ FUNCTION ninterp(ndim,nsize,nshape,qvecs,q0,f)
     ! Get lower bound
     lb = LBOUND(qvecs(i)%val,1)
   
-    ! Coordinates of bracket points
-    ql = qvecs(i)%val(bpts(i,1)+lb-1)
-    qh = qvecs(i)%val(bpts(i,2)+lb-1)
+    ! Coordinates of bracket points. For periodic mesh, these 
+    ! may actually be off the end of mesh
+    ql = qimp(i,1) 
+    qh = qimp(i,2) 
   
     ! Distance between bracket points
     dq = qh - ql
@@ -164,132 +168,93 @@ END FUNCTION
 !>@brief Perform full-weighted restriction in N dimensions
 !
 !>@details
-!! This restriction operator is the adjoin of the N-dimensional
-!! interpolation operator defined by ninterp
 !!
-!! The mesh must have constant spacing in each dimension 
-!! (although the spacing can differ between dimensions)
-!!
-!
-!>@param[in] ndim      Number of dimensions
-!>@param[in] nsize_c   Total number points in coarse mesh
-!>@param[in] nsize_f   Total number of points in fine mesh
-!>@param[in] nshape_c  Number of pts. in each dimension (coarse mesh)
-!>@param[in] nshape_f  Number of pts. in each dimension (fine   mesh)
-!>@param[in] qvec_c    Mesh vectors for coarse mesh
-!>@param[in] qvec_f    Mesh vectors for fine mesh
-!>@param[in] q0        Point where restriction is performed
-!>@param[in] f         Function to be restricted. Defined on fine mesh. Must have size PRODUCT(nvec_f)
-!
-!>@return              Function, f, restricted to coarse mesh point q0
-!
-FUNCTION nrestrict(ndim,nsize_c,nsize_f,nshape_c,nshape_f,qvec_c,qvec_f,q0,f) RESULT(fc)
+SUBROUTINE nrestrict(ndim,nsize_c,nshape_c,qvecs_c,qvecs_f,q0_f,uf0,uc)
+
+  IMPLICIT NONE
 
   ! INPUT
-  INTEGER(IT)                        ,INTENT(IN) :: ndim,nsize_c,nsize_f
-  INTEGER(IT)     ,DIMENSION(ndim)   ,INTENT(IN) :: nshape_c,nshape_f
-  TYPE(MG_PTR),DIMENSION(ndim),TARGET,INTENT(IN) :: qvec_c,qvec_f
-  REAL(FP)    ,DIMENSION(ndim)       ,INTENT(IN) :: q0
-  REAL(FP)    ,DIMENSION(nsize_f)    ,INTENT(IN) :: f
+  INTEGER(IT)                        ,INTENT(IN) :: ndim,nsize_c
+  INTEGER(IT)     ,DIMENSION(ndim)   ,INTENT(IN) :: nshape_c
+  TYPE(MG_PTR),DIMENSION(ndim),TARGET,INTENT(IN) :: qvecs_c,qvecs_f
+  REAL(FP)    ,DIMENSION(ndim)       ,INTENT(IN) :: q0_f
+  REAL(FP)                           ,INTENT(IN) :: uf0 
+
+  ! INPUT/OUTPUT
+  REAL(FP)    ,DIMENSION(nsize_c),INTENT(INOUT) :: uc
   
-  ! RETURN
-  REAL(FP) :: fc
   
-  ! THIS SUBROUTINE
+  ! NAME
   CHARACTER(LEN=*),PARAMETER :: THIS_SUB = "nrestrict"
   
   ! LOCAL
-  REAL(FP)                      :: w,c1,c2
-  INTEGER(IT)                   :: qil,qih,i,j,n,nq,ierr,nsize_s,lb_f,lb_c
-  INTEGER(IT),DIMENSION(ndim,2) :: bpts
-  INTEGER(IT),DIMENSION(ndim)   :: nshape_s,ivec,qic
-  REAL(FP)   ,DIMENSION(ndim)   :: qc,dq_c,dq_f,w2
-    
-  ! ASSERT: Assert that nsize_c/nsize_f is consistent with the array size 
-  !         implied by the shape vector nshape_c/nshape_f
-  !
-  CALL assert_size_shape_consistent(ndim,nsize_c,nshape_c,THIS_SUB,'AC2')
-  CALL assert_size_shape_consistent(ndim,nsize_f,nshape_f,THIS_SUB,'AC3')
-    
-  !
-  ! Compute the range of indices on the fine mesh that contribute
-  ! to the restricted point on the coarse mesh
-  !
-  DO i=1,ndim
-  
-    ! Get lower bounds
-    lb_c = LBOUND(qvec_c(i)%val,1)
-    lb_f = LBOUND(qvec_f(i)%val,1)
-        
-    ! Spacing
-    dq_c(i) = qvec_c(i)%val(lb_c+1) - qvec_c(i)%val(lb_c)
-    dq_f(i) = qvec_f(i)%val(lb_f+1) - qvec_f(i)%val(lb_f)
+  INTEGER(IT) ,DIMENSION(ndim,2 ) :: bpts    !< Bracket points
+  REAL(FP)    ,DIMENSION(ndim,2)  :: qimp    !< Implied coordinate 
+  REAL(FP)                        :: w,c1,c2
+  INTEGER(IT)                     :: i,j,nq,NC,n,indx
+  INTEGER(IT),DIMENSION(ndim)     :: ivec,svec
+  LOGICAL                         :: dimension_is_periodic
+  REAL(FP),DIMENSION(ndim)        :: qc,dq_c,dq_f,w2
+  INTEGER(IT),PARAMETER :: i1 = 1
 
-    ! Weighting
-    w2(i) = dq_f(i)/dq_c(i)**2   
-    
-    ! Bracket points
-    nq = SIZE(qvec_f(i)%val)
-    qil = 0 ; qih = 0
-    CALL find_bracket_points_uniform(qvec_f(i)%val,nq,q0(i)-dq_c(i),qil,qih,ierr) 
-    IF(ierr < 0) THEN
-      bpts(i,1) = qil  
-    ELSE
-      bpts(i,1) = qih    
-    ENDIF
-    
-    qil = 0 ; qih = 0
-    CALL find_bracket_points_uniform(qvec_f(i)%val,nq,q0(i)+dq_c(i),qil,qih,ierr) 
-    IF(ierr > 0) THEN
-      bpts(i,2) = qih  
-    ELSE
-      bpts(i,2) = qil    
-    ENDIF
-      
-    ! Stencil shape
-    nshape_s(i) = bpts(i,2)- bpts(i,1) + 1
-        
+  ! ASSERT: Check that nsize is consistent with total size implied by nshape
+  !
+  CALL assert_size_shape_consistent(ndim,nsize_c,nshape_c,THIS_SUB,"AC1")
+  
+  ! Compute bracket points
+  !
+  ! Note: bracket points are returned in the default range [1,NQ].
+  !       The subroutine get_interpolation_values expects bpts in
+  !       this range. The vector mesh(i)%val may have non-standard
+  !       bounds and must be addressed with bpts + LBOUND(mesh(i)%val,1)-1
+  !       instead of bpts directly
+  !
+  DO i=1,ndim  
+    nq                    = SIZE(qvecs_c(i)%val)
+    dimension_is_periodic = qvecs_c(i)%periodic
+    CALL find_bracket_points_uniform(dimension_is_periodic,qvecs_c(i)%val,nq,q0_f(i),bpts(i,:),qimp(i,:))  
   ENDDO
-
-  ! Compute total size of stencil
-  nsize_s = PRODUCT(nshape_s)
   
-  ! Initialize variable to zero
-  fc = 0
-  
-  !
-  ! Perform restriction
-  !
-  DO j=1,nsize_s
+  ! Get weights
+  DO i=1,ndim
+    dq_c(i)  = qvecs_c(i)%val(2) - qvecs_c(i)%val(1)
+    dq_f(i)  = qvecs_f(i)%val(2) - qvecs_f(i)%val(1)
+    w2(i)    = dq_f(i)/dq_c(i)**2  
+  ENDDO
+ 
+  ! Loop over course grid points. Add weighted contribution 
+  ! from uf(q0)   
+  DO n=1,ndim**2
     
-    ! Convert local linear index "j" into N-Dimensional
-    ivec = 0
-    ivec = lin2nd(ndim,nshape_s,j)
-        
-    ! Get qc
-    DO i=1,NDIM
-      lb_f    = LBOUND(qvec_f(i)%val,1)
-      qic(i)  = bpts(i,1) + ivec(i) - 1
-      qc(i)   = qvec_f(i)%val(qic(i)+lb_f-1) 
+    ! Get ND index of course point and its coordinate 
+    CALL bit2array(n-i1,svec)    
+    DO i=1,ndim
+      ivec(i) = bpts(i,svec(i)+1)
+      qc(i)   = qimp(i,svec(i)+1)
     ENDDO
-    
+
     ! Compute weight
     w = 1
     DO i=1,NDIM
-      c1 = ABS(qc(i) - q0(i))
+      c1 = ABS(qc(i) - q0_f(i))
       c2 = ABS(dq_c(i)  - c1)
       w  = w * c2 *w2(i)
     ENDDO
     
-    ! Compute 1D index
-    n = 0
-    n = nd2lin(ndim,nshape_f,qic)
-
-    fc = fc + w*f(n)
+    ! Convert to linear index 
+    indx = 0
+    indx = nd2lin(ndim,nshape_c,ivec,"LZCA")
+ 
+    ! ASSERT: Assert that j is in range [1,NSIZE]
+    CALL assert_n_inbounds(ndim,nsize_c,indx,ivec,THIS_SUB,"ARECB5")
     
-  ENDDO
-
-END FUNCTION
+    ! Add to weighted sum
+    !$OMP ATOMIC
+    uc(indx) = uc(indx) + w*uf0
+      
+  ENDDO  
+  
+END SUBROUTINE
 
 ! ---------------------------------------------------------------------
 !
@@ -370,18 +335,38 @@ END SUBROUTINE
 !
 !>@brief Find mesh points that bracket point q0
 
-SUBROUTINE find_bracket_points_uniform(qvec,nq,q0,qil,qih,ierr)
+! ---------------------------------------------------------------------
+!
+!>@name find_bracket_points_uniform
+!
+!>@brief Find mesh points that bracket point q0
+!
+!>@details
+!!
+!! Returns the indices of the bracket points bpts. For a periodic 
+!! mesh, these might wrap around
+!!
+!! Returns the implied position of the bracket points (qimp). For 
+!! non-periodic mesh, this is a mesh point. For periodic mesh, this
+!! might be a coordinate outside mesh. 
+!!
+
+SUBROUTINE find_bracket_points_uniform(periodic,qvec,nq,q0,bpts,qimp)
 
   IMPLICIT NONE
     
   ! INPUT 
+  LOGICAL               ,INTENT(IN) :: periodic 
   INTEGER(IT)           ,INTENT(IN) :: nq
   REAL(FP),DIMENSION(nq),INTENT(IN) :: qvec
   REAL(FP)              ,INTENT(IN) :: q0
 
   ! OUTPUT 
-  INTEGER(IT),INTENT(OUT) :: qil,qih
-  INTEGER(IT),INTENT(OUT) :: ierr
+  REAL(FP)   ,INTENT(OUT) :: qimp(2)
+  INTEGER(IT),INTENT(OUT) :: bpts(2)
+  
+  INTEGER(IT) :: qil,qih
+  REAL(FP) :: qh,ql,ql_inf,qh_inf
   
   ! NAME
   CHARACTER(LEN=*),PARAMETER :: THIS_SUB = "find_bracket_points_uniform"
@@ -395,20 +380,30 @@ SUBROUTINE find_bracket_points_uniform(qvec,nq,q0,qil,qih,ierr)
     STOP "FATAL ERROR"
   ENDIF
   
-  ! Point below bottom of vector
-  IF(q0 .le. qvec(1)) THEN
-      qil  = 1 
-      qih  = 2
-      ierr = -1
-    RETURN
-  ENDIF
+  ! If not periodic, the points off the 
+  ! end need to be moved inside domain
+  IF (.NOT. periodic) THEN
 
-  ! Point above top of vector
-  IF(q0 .ge. qvec(nq)) THEN
-      qil  = nq - 1
-      qih  = nq 
-      ierr = +1
-    RETURN
+    ! Point below bottom of vector
+    IF(q0 .le. qvec(1)) THEN
+      qil     = 1 
+      qih     = 2
+      bpts    = [qil,qih]
+      qimp(1) = qvec(qil)
+      qimp(2) = qvec(qih)
+      RETURN    
+    ENDIF
+ 
+    ! Point above top of vector
+    IF(q0 .ge. qvec(nq)) THEN
+      qil     = nq - 1
+      qih     = nq 
+      bpts    = [qil,qih]
+      qimp(1) = qvec(qil)
+      qimp(2) = qvec(qih)
+      RETURN
+    ENDIF
+    
   ENDIF
   
   ! Determine grid spacing
@@ -417,21 +412,53 @@ SUBROUTINE find_bracket_points_uniform(qvec,nq,q0,qil,qih,ierr)
   ! Compute lower index. Need to add 1 since Fortran vectors start
   ! at 1 by default
   qil = FLOOR((q0-qvec(1))/dq) + 1
-
+ 
+  qih = qil + 1
+      
   !
   ! Rounding error in the quotiont (q0-qvec(1))/dq can 
   ! lead to qil == nq without q0 < qvec(nq)
   !
-  IF(qil .ge. nq) THEN
-    qil = nq - 1
-    qih = nq
+!  IF(qil .ge. nq) THEN
+!    qil = nq - 1
+!    qih = nq
+!    STOP "VERY VA"
+!  ELSE
+!    qih = qil + 1
+!  ENDIF
+
+  ! Coordinates of points on an infinite uniform mesh 
+  ql_inf = (qil-1)*dq + qvec(1)
+  qh_inf = ql_inf + dq
+  
+  ! If periodic, then this can outside domain
+  ! This might be overkills because points shouldn't generally 
+  ! be more than one period outside mesh domain
+  IF (periodic) THEN
+  
+    IF ((qil < 1) .OR. (qil > nq)) THEN
+      qil = MODULO(qil-1,nq)+1
+    ENDIF
+      
+    IF ((qih < 1) .OR. (qih > nq)) THEN
+      qih = MODULO(qih-1,nq)+1
+    ENDIF
+
+  ENDIF
+    
+  ! Actual coordinate values, for periodic case these are 
+  ! the implied coordinates 
+  IF (periodic) THEN
+    qimp(1) = ql_inf
+    qimp(2) = qh_inf
   ELSE
-    qih = qil + 1
+    qimp(1) = qvec(qil)
+    qimp(2) = qvec(qih)
   ENDIF
   
-  ! No error
-  ierr = 0
-  
+  ! Output
+  bpts = [qil,qih]
+    
 END SUBROUTINE                              
 
 ! ---------------------------------------------------------------------
