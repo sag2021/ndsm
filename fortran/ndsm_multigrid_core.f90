@@ -84,20 +84,20 @@ MODULE NDSM_MULTIGRID_CORE
   !
   !
   TYPE :: MG_HANDLE
-    INTEGER(IT)                             :: ms       = -1 !< Number of relaxation sweeps for smoothing
-    INTEGER(IT)                             :: ngrids   = -1 !< Number of grids 
-    REAL(FP)                                :: ex_tol   = -1 !< Tolerance for coarsest grid solution 
-    INTEGER(IT)                             :: ndim     = -1 !< Number of dimensions
-    INTEGER(IT),DIMENSION(:,:) ,ALLOCATABLE :: nshape        !< Sizes (in mesh points) of each grid
-    INTEGER(IT),DIMENSION(:)   ,ALLOCATABLE :: nsize         !< Total number of points in each grid
-    TYPE(MG_PTR),DIMENSION(:)  ,ALLOCATABLE :: u             !< Dependent variable
-    TYPE(MG_PTR),DIMENSION(:)  ,ALLOCATABLE :: rhs           !< Right-hand side
-    TYPE(MG_PTR),DIMENSION(:,:),ALLOCATABLE :: meshes        !< Meshes for each grid   
-    INTEGER(IT)     ,DIMENSION(MG_OPT_LEN)  :: iopt          !< User-defined integer options
-    REAL(FP)        ,DIMENSION(MG_OPT_LEN)  :: ropt          !< User-defined real options
-    CHARACTER(LEN=1),DIMENSION(MG_OPT_LEN)  :: copt          !< User-defined character options
-    LOGICAL                                 :: du_max        !< Use max as convergence metric
-    INTEGER(IT)                             :: nmax_exact    !< Max. number of iterations on exact solution
+    INTEGER(IT)                                 :: ms       = -1 !< Number of relaxation sweeps for smoothing
+    INTEGER(IT)                                 :: ngrids   = -1 !< Number of grids 
+    REAL(FP)                                    :: ex_tol   = -1 !< Tolerance for coarsest grid solution 
+    INTEGER(IT)                                 :: ndim     = -1 !< Number of dimensions
+    INTEGER(IT),DIMENSION(:,:) ,ALLOCATABLE     :: nshape        !< Sizes (in mesh points) of each grid
+    INTEGER(IT),DIMENSION(:)   ,ALLOCATABLE     :: nsize         !< Total number of points in each grid
+    TYPE(MG_PTR),DIMENSION(:)  ,ALLOCATABLE     :: u             !< Dependent variable
+    TYPE(MG_PTR),DIMENSION(:)  ,ALLOCATABLE     :: rhs           !< Right-hand side
+    TYPE(MG_PTR),DIMENSION(:,:),ALLOCATABLE     :: meshes        !< Meshes for each grid   
+    INTEGER(IT)     ,DIMENSION(MG_OPT_LEN)      :: iopt          !< User-defined integer options
+    REAL(FP)        ,DIMENSION(MG_OPT_LEN)      :: ropt          !< User-defined real options
+    CHARACTER(LEN=1),DIMENSION(MG_OPT_LEN)      :: copt          !< User-defined character options
+    LOGICAL                                     :: du_max        !< Use max as convergence metric
+    INTEGER(IT)                                 :: nmax_exact    !< Max. number of iterations on exact solution
   END TYPE
   
   !
@@ -178,8 +178,8 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max,nmax_exact)
   TYPE(MG_HANDLE),INTENT(OUT) :: this
   
   ! LOCAL
-  INTEGER(IT) :: i,j,n,nq
-  REAL(FP)    :: Lq,qil,dq
+  INTEGER(IT) :: i,j,n,nq,nq0
+  REAL(FP)    :: Lq(ndim),qmin,dq,dq0
   
   ! LOCAL PARAM.
   REAL(FP),PARAMETER :: inv2 = REAL(1,FP)/REAL(2,FP) ! 1/2
@@ -210,10 +210,28 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max,nmax_exact)
   ! Finest grid 
   this%nshape(:,1) = nshape
     
+  ! Get extent of finest mesh. This calculation will differ 
+  ! if the mesh is periodic 
+  DO i=1,ndim
+    nq0 = SIZE(mesh(i)%val)
+    dq0 = mesh(i)%val(2)-mesh(i)%val(1)
+    IF (mesh(i)%periodic) THEN
+      Lq(i) = dq0*nq0    
+    ELSE
+      Lq(i) = dq0*(nq0-1)
+    ENDIF
+  ENDDO  
+
   ! Compute grid sizes. Each coarser grid has half as many points
   ! as the previous one, but never goes below one.
   DO i=2,ngrids
+  
+    ! Halve the number of points
     this%nshape(:,i) = MAX(FLOOR(this%nshape(:,i-1)*inv2),1)
+    
+    ! Force even subgrids
+    this%nshape(:,i) = this%nshape(:,i) + MODULO(this%nshape(:,i),INT(2,FP))
+            
   ENDDO  
   
   ! Construct the total size of each grid 
@@ -227,39 +245,48 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max,nmax_exact)
   !
   ALLOCATE(this%meshes(ndim,ngrids))
 
+  ! Propagate periodic flag 
+  DO n=1,ngrids
+    DO i=1,ndim
+      this%meshes(i,n)%periodic = mesh(i)%periodic
+    ENDDO
+  ENDDO 
+
   ! Finest grid
   DO i=1,ndim
-    ALLOCATE(this%meshes(i,1)%val(nshape(i)))
-    
+    ALLOCATE(this%meshes(i,1)%val(nshape(i)))    
     DO j = 1,nshape(i)
       this%meshes(i,1)%val(j) = mesh(i)%val(j)  
-    ENDDO
-    
+    ENDDO    
   ENDDO
   
   !
   ! Coarser meshes
   !
   DO n=2,ngrids
-  
     DO i=1,ndim  
-    
+        
+      ! Number of mesh points 
       nq = this%nshape(i,n)
     
       ! Allocate
       ALLOCATE(this%meshes(i,n)%val(nq))
     
-      ! Extent
-      qil = MINVAL(mesh(i)%val)
-      Lq  = MAXVAL(mesh(i)%val) - qil  
-         
-      ! Generate
-      DO j=1,nq
-        this%meshes(i,n)%val(j) = (j-1)*Lq/REAL(nq-1,FP) + qil 
-      ENDDO
-   
+      ! Extent of mesh. This correctly captures length of domain
+      ! for periodic and non-periodic 
+      qmin = MINVAL(mesh(i)%val)
+            
+      ! Spacing depends of period/non-periodic 
+      IF (this%meshes(i,n)%periodic) THEN
+        dq = Lq(i)/REAL(nq,FP)
+      ELSE
+        dq = Lq(i)/REAL(nq-1,FP)
+      ENDIF
+       
+      ! Build mesh
+      CALL create_mesh(dq,qmin,this%meshes(i,n)%val)
+            
     ENDDO
-    
   ENDDO
     
   ! Data arrays. Not individual elements are not allocated, 
@@ -268,6 +295,27 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max,nmax_exact)
   ALLOCATE(this%rhs(ngrids))
   
 END SUBROUTINE
+
+! ----------------------------------------------------------------------
+
+SUBROUTINE create_mesh(dq,qmin,qvec)
+
+  IMPLICIT NONE
+  
+  ! INPUT
+  REAL(FP),INTENT(IN) :: dq,qmin
+  
+  ! OUTPUT
+  REAL(FP),DIMENSION(:),INTENT(OUT) :: qvec
+  
+  ! LOCAL
+  INTEGER :: i
+    
+  DO i=1,SIZE(qvec)
+    qvec(i) = (i-1)*dq + qmin
+  ENDDO
+
+END SUBROUTINE 
 
 ! ----------------------------------------------------------------------
 !
@@ -785,6 +833,9 @@ SUBROUTINE solve_exact(this,grid_id,relax)
     ELSE
       du = metrics(2)
     ENDIF
+
+    ! TODO: TEST
+    !PRINT *,"A:",i,  du,SUM(fe), this%ex_tol
           
     ! Save previous iteration 
     CALL copy(u_sav,ue)  

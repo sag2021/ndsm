@@ -412,20 +412,18 @@ SUBROUTINE find_bracket_points_uniform(periodic,qvec,nq,q0,bpts,qimp)
   ! Compute lower index. Need to add 1 since Fortran vectors start
   ! at 1 by default
   qil = FLOOR((q0-qvec(1))/dq) + 1
- 
   qih = qil + 1
       
   !
   ! Rounding error in the quotiont (q0-qvec(1))/dq can 
   ! lead to qil == nq without q0 < qvec(nq)
   !
-!  IF(qil .ge. nq) THEN
-!    qil = nq - 1
-!    qih = nq
-!    STOP "VERY VA"
-!  ELSE
-!    qih = qil + 1
-!  ENDIF
+  IF(.NOT. periodic) THEN
+    IF(qil .ge. nq) THEN
+      qil = nq - 1
+      qih = nq
+    ENDIF
+  ENDIF
 
   ! Coordinates of points on an infinite uniform mesh 
   ql_inf = (qil-1)*dq + qvec(1)
@@ -458,7 +456,7 @@ SUBROUTINE find_bracket_points_uniform(periodic,qvec,nq,q0,bpts,qimp)
   
   ! Output
   bpts = [qil,qih]
-    
+        
 END SUBROUTINE                              
 
 ! ---------------------------------------------------------------------

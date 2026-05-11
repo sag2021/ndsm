@@ -127,6 +127,8 @@ SUBROUTINE solve_poisson_bvp(bvp,nsize,vc_tol,nmax,u,rhs,du_last,ierr)
     ELSE
       du = du_mean
     ENDIF
+    
+    !PRINT *,"V:",du
 
     ! Print change in solution
     WRITE(du_string,"(ES12.4)") du
@@ -183,23 +185,6 @@ SUBROUTINE ndsm_residual_wrapper(this,g_id,u,rhs,r)
   
   nc  = 2*this%ndim
   bcs = RESHAPE(this%copt(1:nc),[this%ndim,i2])
-
-  
-  ! Call optimized routine for 3D
-  IF(this%ndim == 3) THEN
-    CALL poisson_residual_3D(bcs                   , &
-                             this%nshape(1,g_id)    , &
-                             this%nshape(2,g_id)    , &
-                             this%nshape(3,g_id)    , &
-                             this%meshes(1,g_id)%val, &
-                             this%meshes(2,g_id)%val, & 
-                             this%meshes(3,g_id)%val, &
-                             this%rhs(g_id)%val     , & 
-                             this%u(g_id)%val       , &
-                             r                      )
-    RETURN
-  ENDIF
- 
   
   !
   ! Call generic residual operator on grid with ID g_id
@@ -244,20 +229,6 @@ SUBROUTINE ndsm_relax_wrapper(this,g_id,u,rhs)
   nc  = 2*this%ndim
   bcs = RESHAPE(this%copt(1:nc),[this%ndim,i2])
 
-  ! Call optimized routine for 3D
-  IF(this%ndim == 3) THEN
-    CALL red_black_gauss_3D(bcs                    , &
-                            this%nshape(1,g_id)    , &
-                            this%nshape(2,g_id)    , &
-                            this%nshape(3,g_id)    , &
-                            this%meshes(1,g_id)%val, &
-                            this%meshes(2,g_id)%val, & 
-                            this%meshes(3,g_id)%val, &
-                            this%rhs(g_id)%val     , & 
-                            this%u(g_id)%val       )
-    RETURN
-  ENDIF
-  
   !
   ! Call relaxation operator on grid with grid ID g_id
   !
@@ -295,7 +266,7 @@ SUBROUTINE residual(ndim,nsize,nshape,qvecs,bcs,u,rhs,r)
   INTEGER(IT) ,DIMENSION(ndim) :: nstrides,ivec,bmask
   REAL(FP),DIMENSION(ndim)     :: dq,wc
   INTEGER(IT)                  :: i,n,dn(2)
-  REAL(FP)                     :: laplace_u
+  REAL(FP)                     :: laplace_u,u_mean
   
   ! Compute strides
   nstrides = shape_to_strides(ndim,nshape)
@@ -331,8 +302,7 @@ SUBROUTINE residual(ndim,nsize,nshape,qvecs,bcs,u,rhs,r)
       ! STENCIL LOOP
       ! ============
       !
-      laplace_u = 0
-      
+      laplace_u = 0      
       STENCIL_LOOP : DO i=1,NDIM
     
         ! Strides
@@ -342,13 +312,23 @@ SUBROUTINE residual(ndim,nsize,nshape,qvecs,bcs,u,rhs,r)
         ! Apply stencil
         laplace_u = laplace_u + (u(n+dn(1)) - 2*u(n) + u(n+dn(2)))*wc(i) 
   
-    ENDDO STENCIL_LOOP
+      ENDDO STENCIL_LOOP
     
       ! Compute residual
       r(n) =  rhs(n) - laplace_u
     
   ENDDO ARRAY_LOOP
   !$OMP END PARALLEL DO
+
+  ! Remove mean from res
+  IF(.NOT. ALL(bcs == "D")) THEN
+    u_mean = mean(nsize,r)
+    !$OMP PARALLEL DO PRIVATE(n)
+    DO n=1,nsize
+      r(n) = r(n) - u_mean
+    ENDDO
+    !$OMP END PARALLEL DO    
+  ENDIF
  
 END SUBROUTINE
 
@@ -530,12 +510,12 @@ SUBROUTINE relax(ndim,nsize,nshape,qvecs,bcs,u,rhs)
   ! Neumann correction
   !
   ! For pure Neumann problems, the mean must be subtracted off
-  !  
+  !    
   IF(.NOT. ALL(bcs == "D")) THEN
 
     ! Compute mean
     u_mean = mean(nsize,u)
-    
+
     ! Subtract  mean
     !
     !$OMP PARALLEL DO PRIVATE(n)
@@ -656,7 +636,6 @@ SUBROUTINE stencil_stride(ndim,nshape,bmask,nstrides,i,bcs,dn)
       
     ! Lower boundary 
     CASE(BND_LOWER)
-
       ! Periodic 
       IF(bcs(1)=="P") THEN
         dn(1) = +(nshape(i)-1)*nstrides(i)
@@ -668,6 +647,7 @@ SUBROUTINE stencil_stride(ndim,nshape,bmask,nstrides,i,bcs,dn)
 
     ! Upper boundary
     CASE(BND_UPPER)
+
       ! Periodic 
       IF(bcs(2)=="P") THEN
         dn(1) = -nstrides(i)  
