@@ -46,6 +46,9 @@ MODULE NDSM_VECTOR_POTENTIAL
   INTEGER,PUBLIC,PARAMETER :: IOPT_DEBUG   = 5     !< Prints more information when running
   INTEGER,PUBLIC,PARAMETER :: IOPT_DUMAX   = 6     !< If set, use max change as convergence metric
   INTEGER,PUBLIC,PARAMETER :: IOPT_NMAXEX  = 7     !< Max. iterations for exact solution 
+  INTEGER,PUBLIC,PARAMETER :: IOPT_PER_X   = 8     !< Periodic flags
+  INTEGER,PUBLIC,PARAMETER :: IOPT_PER_Y   = 9
+  INTEGER,PUBLIC,PARAMETER :: IOPT_PER_Z   = 10
   INTEGER,PUBLIC,PARAMETER :: IOPT_TRUE    = 1
   INTEGER,PUBLIC,PARAMETER :: IOPT_FALSE   = 0
 
@@ -78,9 +81,12 @@ MODULE NDSM_VECTOR_POTENTIAL
   ! imap_nc: Maps boundary ID to pair of indices that define local 
   !          tangent directions in given boundary  
   !
+  ! imap_dim: Map boundary index to its dimension, i.e. x,y,z 
   !
-  INTEGER(IT),DIMENSION(6)  ,PARAMETER :: imap_ul = [1,2,1,2,1,2]                                !< Upper-lower map
-  INTEGER(IT),DIMENSION(6)  ,PARAMETER :: imap_cp = [1,1,2,2,3,3]                                !< Component map
+  !
+  INTEGER(IT),DIMENSION(6)  ,PARAMETER :: imap_ul  = [1,2,1,2,1,2]                                !< Upper-lower map
+  INTEGER(IT),DIMENSION(6)  ,PARAMETER :: imap_cp  = [1,1,2,2,3,3]                                !< Component map
+  INTEGER(IT),DIMENSION(6)  ,PARAMETER :: imap_dim = [1,1,2,2,3,3]                                !< Dimension of boundary 
   INTEGER(IT),DIMENSION(2,6),PARAMETER :: imap_nc = RESHAPE([2,3,2,3,1,3,1,3,1,2,1,2],[2,6])
 
   ! ============
@@ -188,21 +194,22 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   ! MISC
   INTEGER(IT) :: lb,ndim,ngrids,nmin,nsize,ierr
   INTEGER(IT),PARAMETER :: i1 = 1
-  LOGICAL :: USE_DU_MAX 
+  LOGICAL :: USE_DU_MAX ,periodic_bc(2)
+  LOGICAL,DIMENSION(6) :: periodic
   REAL(FP) :: dq1,dq2
 
-
+  ! Unpack periodic flag 
+  DO i=1,3
+    periodic(2*i)   = mesh(i)%periodic
+    periodic(2*i-1) = mesh(i)%periodic    
+  ENDDO
+    
   ! Conv. flag 
   USE_DU_MAX = (IOPT(IOPT_DUMAX) == IOPT_TRUE)
 
   ! ====================
   ! GET MESH VARS
   ! ====================
-
-  ! Get mesh extent
-  DO i=1,SIZE(mesh)
-    Lq(i) = MAXVAL(mesh(i)%val) - MINVAL(mesh(i)%val)
-  ENDDO
 
   ! Get mesh spacing. Spacing is assumed to be uniform.
   ! The spacing is computed as the difference between the first
@@ -222,6 +229,15 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
         
   ENDDO
 
+  ! Get mesh extent
+  DO i=1,SIZE(mesh)
+    IF(mesh(i)%periodic) THEN
+      Lq(i) = dq(i)*SIZE(mesh(i)%val)    
+    ELSE
+      Lq(i) = dq(i)*(SIZE(mesh(i)%val)-1)
+    ENDIF
+  ENDDO
+    
   ! ====================
   ! EXTRACT BCS FOR B
   ! ====================
@@ -266,7 +282,8 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   DO j=1,SIZE(bn)
     DO i=1,2
       ALLOCATE(mesh_bn(i,j)%val( nshape_bn(i,j) ))
-      mesh_bn(i,j)%val = mesh(imap_nc(i,j))%val
+      mesh_bn(i,j)%val      = mesh(imap_nc(i,j))%val
+      mesh_bn(i,j)%periodic = mesh(imap_nc(i,j))%periodic
     ENDDO  
   ENDDO
 
@@ -305,15 +322,27 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     dq1 = dq(imap_nc(1,i))
     dq2 = dq(imap_nc(2,i))
     
+    ! Set to zero for periodic 
+    IF (periodic(i)) THEN
+      phi_b(i) = 0 
+      CYCLE
+    ENDIF
+    
+    
+    ! Periodicity in the boundary
+    periodic_bc(1) = mesh(imap_nc(1,i))%periodic
+    periodic_bc(2) = mesh(imap_nc(2,i))%periodic
+               
     ! Compute flux   
     phi_b(i) = trapz_2D(nshape_bn(1,i), &
                         nshape_bn(2,i), &
                         dq1,            &
-                        dq2,            & 
+                        dq2,            &
+                        periodic_bc,    &
                         bn(i)%val)
 
   ENDDO
-
+      
   ! ====================
   ! SOLVE 2D BVPS
   ! ====================
@@ -339,7 +368,7 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
 
   Aq(5) = Lq(1)*Lq(2)
   Aq(6) = Lq(1)*Lq(2)  
-  
+    
   !
   ! Solve BVP on each boundary
   !
@@ -352,6 +381,12 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
   
     ! Initialize chi array to zero
     chi(i)%val = 0
+    
+    ! Don't calculate for periodic dimensions
+    IF (periodic(i)) THEN
+      chi(i)%val = 0
+      CYCLE 
+    ENDIF    
   
     ! Flux balance boundary
     bn(i)%val = bn(i)%val - phi_b(i)/Aq(i)
@@ -363,16 +398,20 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     ! Set option values
     bvp%ms                = IOPT(IOPT_MS  )  ! Smoothing sweeps
     bvp%ex_tol            = ROPT(ROPT_CTOL)  ! Exact solution tolerance
-    bvp%copt(1:SIZE(bn))  = "N"              ! Boundary conditions
-    
+
+    ! Set boundary condition flags. This ensures that the 
+    ! correct periodic or Neumann bcs are used
+    ! 
+    CALL construct_bcs_flags_2D(i,mesh,bvp%copt(1:4))    
+        
     ! Solve 
     CALL solve_poisson_bvp(bvp,nsize_bn(i),ropt(ROPT_VTOL),iopt(IOPT_NCYCLES),chi(i)%val,bn(i)%val,du_last,ierr) 
   
     ! Delete MG handle
     CALL delete_mg_handle(bvp)
-    
+        
   ENDDO
-
+  
   ! =========================
   ! COMPUTE BOUNDARY CONDITIONS FOR AT
   ! ==========================
@@ -398,6 +437,11 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     ! Initialize to zero
     At(1,i)%val = 0
     At(2,i)%val = 0
+
+    ! Don't calculate for periodic dimensions
+    IF (periodic(i)) THEN
+      CYCLE 
+    ENDIF    
     
     ! Maps to component
     j = imap_cp(i)
@@ -407,9 +451,14 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     ! dq2 change in coordinate in tvec2 direction 
     dq1 = dq(imap_nc(1,i))
     dq2 = dq(imap_nc(2,i))
+
+    ! Periodicity in the boundary
+    periodic_bc(1) = mesh(imap_nc(1,i))%periodic
+    periodic_bc(2) = mesh(imap_nc(2,i))%periodic
+           
     
     ! Compute At at each boundary
-    CALL  compute_At_bcs(nshape_bn(:,i),chi(i)%val,dq1,dq2      ,tvecs1(:,i), &
+    CALL  compute_At_bcs(nshape_bn(:,i),chi(i)%val,dq1,dq2,periodic_bc,tvecs1(:,i), &
                          tvecs2(:,i)   ,nvecs(:,i),At(1,i)%val,At(2,i)%val)    
   ENDDO
 
@@ -424,37 +473,10 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
 
       
   !
-  ! Compute with Bn nonzero on only one face at a time
+  ! Compute A all at once
   !
-  SELECT CASE(IOPT_FACE1) 
-  
-    CASE(1)
-    !
-    ! Compute A one face at a time and then sum the results
-    !    
-    PRINT *,"FLAG SET: FACE1"
-    ALLOCATE(Ac(nshape(1),nshape(2),nshape(3),3)) 
-
-    ! Initialize A to zero
-    Apot = 0
-  
-    ! Sum contribution from solving BVP for each of the six faces
-    DO i=1,6 
-      Ac = 0  
-      CALL  solve_6faces(i,ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)  
-      Apot = Apot + Ac
-    ENDDO
-
-    DEALLOCATE(Ac)
-   
-    CASE DEFAULT
-    !
-    ! Default: Compute A from all six faces at once
-    !
+  CALL solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Apot)
     
-    CALL solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Apot)
-    
-  END SELECT
 
   ! ===============
   ! COMPUTE CURL
@@ -477,7 +499,7 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     
     PRINT *,"FLAG SET: FLXCRL"
     CALL curl(dq,Apot,B)    
-    CALL add_flux_balance_fields(nshape,mesh,phi_b,B,Apot)
+    CALL add_flux_balance_fields(nshape,mesh,Lq,phi_b,B,Apot)
     
     CASE DEFAULT
     !
@@ -486,7 +508,7 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
     ! of the flux corrected vector potential. The correction to
     ! the vector potential is analytic.
     
-    CALL add_flux_balance_fields(nshape,mesh,phi_b,B,Apot)
+    CALL add_flux_balance_fields(nshape,mesh,Lq,phi_b,B,Apot)
     CALL curl(dq,Apot,B)
     
   END SELECT
@@ -512,100 +534,82 @@ SUBROUTINE compute_vector_potential(nshape,iopt,ropt,mesh,Apot,B)
 END SUBROUTINE
 
 ! ---------------------------------------------------------------------
+!
+!>@brief Construct boundary condition flag vector 
+!
+!>@details
+!!  Vector has 4 elements [B1,B2,B1,B2] 
+!!
+!! If boundary is 2D with local coordinates (u,v), and upper/lower
+!! boundary for u is Bu_upp,Bu_low, then flag vector is packed 
+!! as 
+!!
+!! [Bu_low,Bu_upp,Bv_low,Bv_upp]
+!!
+!!
+!! 
+!!
 
-SUBROUTINE solve_6faces(cdim,ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
+!! The 2D planar boundary has local dimension u1,u2 
+!!
+!!
 
-  ! INPUT
-  INTEGER(IT)                         ,INTENT(IN) :: cdim
-  INTEGER(IT) ,DIMENSION(:)           ,INTENT(IN) :: nsize_bn,nshape
-  REAL(FP)    ,DIMENSION(0:ROPT_LEN-1),INTENT(IN) :: ROPT
-  INTEGER(IT) ,DIMENSION(0:IOPT_LEN-1),INTENT(IN) :: IOPT
-  TYPE(MG_PTR),DIMENSION(:)           ,INTENT(IN) :: mesh
+SUBROUTINE construct_bcs_flags_2D(bid,mesh,bcs)
+
+  ! INPUT 
+  INTEGER(IT)              ,INTENT(IN) :: bid
+  TYPE(MG_PTR),DIMENSION(3),INTENT(IN) :: mesh
   
-  ! INPUT/OUTPUT
-  REAL(FP),DIMENSION(:,:,:,:),ALLOCATABLE,INTENT(INOUT) :: Ac
-  TYPE(MG_PTR),DIMENSION(:,:)            ,INTENT(INOUT) :: At
+  ! OUTPUT
+  CHARACTER(LEN=1),DIMENSION(4),INTENT(OUT) :: bcs 
   
   ! LOCAL
-  TYPE(MG_HANDLE)                       :: bvp
-  REAL(FP),DIMENSION(:,:,:),ALLOCATABLE :: rhs
-  INTEGER(IT)                           :: max_vcycles,ngrids,nmin,ndim,nsize,ierr
-  REAL(FP)                              :: vcycle_tol,coarse_tol,du_last
-  LOGICAL                               :: USE_DU_MAX
+  INTEGER(IT) :: bid2 
+  
+  ! Default Neumann 
+  bcs = "N"       
 
-  ! LOCAL INT. PARAMS
-  INTEGER(IT),PARAMETER  :: i1 = 1
-  INTEGER(IT),PARAMETER  :: i2 = 2
-  INTEGER(IT),PARAMETER  :: i3 = 3
-  
-  ! Conv. flag 
-  USE_DU_MAX = (IOPT(IOPT_DUMAX) == IOPT_TRUE)
+  ! Check if dimension u1 is periodic 
+  bid2 = imap_nc(1,bid)
+  IF (mesh(bid2)%periodic) THEN
+    bcs(1) = "P" 
+    bcs(3) = "P"
+  ENDIF
 
-  ! Set dimensions and size parameter
-  ndim = 3
-  nsize = PRODUCT(nshape(:3))
+  ! Check if dimension u2 is periodic 
+  bid2 = imap_nc(2,bid)
+  IF (mesh(bid2)%periodic) THEN
+    bcs(2) = "P"
+    bcs(4) = "P"
+  ENDIF
   
-  ! Compute number of grids to use
-  nmin   = MINVAL(nshape(:3))
-  ngrids = FLOOR(LOG(nmin/BASE_GRID)/LOG(2.D+0))
-  
-  ! Unpack
-  max_vcycles = IOPT(IOPT_NCYCLES)
-  vcycle_tol  = ROPT(ROPT_VTOL)
-  coarse_tol  = ROPT(ROPT_CTOL)
-  
-  ! Allocate RHS
-  ALLOCATE(rhs(nshape(1),nshape(2),nshape(3)))
-  rhs = 0
-  
-  ! ===============
-  ! AX
-  ! ===============
-  
-  IF(cdim == 3) CALL extract_bn(nsize_bn(3),nshape(:3),i2,i1       ,Ac(:,:,:,1),At(1,3)%val,dir=-i1)
-  IF(cdim == 4) CALL extract_bn(nsize_bn(4),nshape(:3),i2,nshape(2),Ac(:,:,:,1),At(1,4)%val,dir=-i1)  
-  IF(cdim == 5) CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,1),At(1,5)%val,dir=-i1)
-  IF(cdim == 6) CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,1),At(1,6)%val,dir=-i1)
-    
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
-  bvp%ms                = IOPT(IOPT_MS)
-  bvp%ex_tol            = coarse_tol
-  bvp%copt(1:6)         = ["N","D","D","N","D","D"]  
-  CALL solve_poisson_bvp(bvp,nsize, vcycle_tol,max_vcycles,Ac(:,:,:,1),rhs,du_last,ierr) 
-  CALL delete_mg_handle(bvp)
-  
-  ! ===============
-  ! AY
-  ! ===============
+END SUBROUTINE
 
-  IF(cdim == 1) CALL extract_bn(nsize_bn(1),nshape(:3),i1,i1       ,Ac(:,:,:,2),At(1,1)%val,dir=-i1)
-  IF(cdim == 2) CALL extract_bn(nsize_bn(2),nshape(:3),i1,nshape(1),Ac(:,:,:,2),At(1,2)%val,dir=-i1)  
-  IF(cdim == 5) CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,2),At(2,5)%val,dir=-i1)
-  IF(cdim == 6) CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,2),At(2,6)%val,dir=-i1)
+! ---------------------------------------------------------------------
+!
+!
+! Vector must be correctly packed
+
+SUBROUTINE set_periodic_flags_3D(bcs,mesh)
+
+  IMPLICIT NONE
   
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
-  bvp%ms         = IOPT(IOPT_MS)
-  bvp%ex_tol     = coarse_tol
-  bvp%copt(1:6)  = ["D","N","D","D","N","D"]  
-  CALL solve_poisson_bvp(bvp,nsize,vcycle_tol,max_vcycles,Ac(:,:,:,2),rhs,du_last,ierr)   
-  CALL delete_mg_handle(bvp)
-
-  ! ===============
-  ! AZ
-  ! ===============
-
-  IF(cdim == 1) CALL extract_bn(nsize_bn(1),nshape(:3),i1,i1       ,Ac(:,:,:,3),At(2,1)%val,dir=-i1)
-  IF(cdim == 2) CALL extract_bn(nsize_bn(2),nshape(:3),i1,nshape(1),Ac(:,:,:,3),At(2,2)%val,dir=-i1)
-  IF(cdim == 3) CALL extract_bn(nsize_bn(3),nshape(:3),i2,i1       ,Ac(:,:,:,3),At(2,3)%val,dir=-i1)
-  IF(cdim == 4) CALL extract_bn(nsize_bn(4),nshape(:3),i2,nshape(2),Ac(:,:,:,3),At(2,4)%val,dir=-i1)
+  ! INPUT
+  TYPE(MG_PTR),DIMENSION(3),INTENT(IN) :: mesh
   
-  CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
-  bvp%ms                = 5
-  bvp%ex_tol            = coarse_tol
-  bvp%copt(1:6)         = ["D","D","N","D","D","N"]  
-  CALL solve_poisson_bvp(bvp,nsize,vcycle_tol,max_vcycles,Ac(:,:,:,3),rhs,du_last,ierr) 
-  CALL delete_mg_handle(bvp) 
+  ! INPUT/OUTPUT
+  CHARACTER(LEN=1),DIMENSION(6),INTENT(INOUT) :: bcs
 
+  ! LOCAL
+  INTEGER(IT) :: i
+  
+  DO i=1,SIZE(mesh)
+    IF (mesh(i)%periodic) THEN
+      bcs(i)   = "P"
+      bcs(i+3) = "P"
+    ENDIF
+  ENDDO  
+  
 END SUBROUTINE
 
 ! ----------------------------------------------------------------------
@@ -644,7 +648,7 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   
   ! Compute number of grids to use
   nmin   = MINVAL(nshape(:3))
-  ngrids = FLOOR(LOG(nmin/BASE_GRID)/LOG(REAL(2,FP)))
+  ngrids =FLOOR(LOG(nmin/BASE_GRID)/LOG(REAL(2,FP)))
   
   ! Unpack
   max_vcycles = IOPT(IOPT_NCYCLES)
@@ -664,10 +668,14 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   CALL extract_bn(nsize_bn(5),nshape(:3),i3,i1       ,Ac(:,:,:,1),At(1,5)%val,dir=-i1)
   CALL extract_bn(nsize_bn(6),nshape(:3),i3,nshape(3),Ac(:,:,:,1),At(1,6)%val,dir=-i1)
     
+    
+    
   CALL new_mg_handle(bvp,NDIM,nshape,NGRIDS,mesh,USE_DU_MAX,iopt(IOPT_NMAXEX))
   bvp%ms                = IOPT(IOPT_MS)
   bvp%ex_tol            = coarse_tol
   bvp%copt(1:6)         = ["N","D","D","N","D","D"]  
+  CALL set_periodic_flags_3D( bvp%copt(1:6) ,mesh)    
+    
   CALL solve_poisson_bvp(bvp,nsize, vcycle_tol,max_vcycles,Ac(:,:,:,1),rhs,du_last,ierr) 
   CALL delete_mg_handle(bvp)
   
@@ -684,6 +692,8 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   bvp%ms         = IOPT(IOPT_MS)
   bvp%ex_tol     = coarse_tol
   bvp%copt(1:6)  = ["D","N","D","D","N","D"]  
+  CALL set_periodic_flags_3D( bvp%copt(1:6) ,mesh)  
+    
   CALL solve_poisson_bvp(bvp,nsize,vcycle_tol,max_vcycles,Ac(:,:,:,2),rhs,du_last,ierr)   
   CALL delete_mg_handle(bvp)
 
@@ -700,8 +710,11 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   bvp%ms                = 5
   bvp%ex_tol            = coarse_tol
   bvp%copt(1:6)         = ["D","D","N","D","D","N"]  
+  CALL set_periodic_flags_3D( bvp%copt(1:6) ,mesh)
   CALL solve_poisson_bvp(bvp,nsize,vcycle_tol,max_vcycles,Ac(:,:,:,3),rhs,du_last,ierr) 
   CALL delete_mg_handle(bvp) 
+
+
     
 END SUBROUTINE
 
@@ -762,12 +775,6 @@ END SUBROUTINE
 !>@name curl
 !
 !>@brief Compute B = curl(A)
-!
-!>@details
-!!
-!! Compute curl(A) using CFITX derive module 
-!!
-!!
 !
 !>@param[in] nshape Shape of A and B
 !
@@ -892,7 +899,7 @@ END FUNCTION
 !
 !>@brief Add flux correction fields
 !
-SUBROUTINE add_flux_balance_fields(nshape,mesh,phi_b,B,A)
+SUBROUTINE add_flux_balance_fields(nshape,mesh,Lq,phi_b,B,A)
 
   IMPLICIT NONE
 
@@ -900,13 +907,14 @@ SUBROUTINE add_flux_balance_fields(nshape,mesh,phi_b,B,A)
   INTEGER(IT)  ,DIMENSION(3)      ,INTENT(IN) :: nshape
   TYPE(MG_PTR),DIMENSION(3),TARGET,INTENT(IN) :: mesh
   REAL(FP)    ,DIMENSION(:)       ,INTENT(IN) :: phi_b
+  REAL(FP)    ,DIMENSION(3)       ,INTENT(IN) :: Lq
 
   ! INPUT/OUTPUT
   REAL(FP),DIMENSION(:,:,:,:),INTENT(INOUT) :: b,A
   
   ! LOCAL
   INTEGER(IT)           :: i,j,k
-  REAL(FP),DIMENSION(3) :: Lq,bc,Ac,gamma,A1_l,A2_l,A3_l,A_c
+  REAL(FP),DIMENSION(3) :: bc,Ac,gamma,A1_l,A2_l,A3_l,A_c
   REAL(FP)              :: Vq
   REAL(FP),PARAMETER    :: o0   = REAL(0,FP)
   REAL(FP),PARAMETER    :: inv3 = REAL(1,FP)/REAL(3,FP)
@@ -914,11 +922,6 @@ SUBROUTINE add_flux_balance_fields(nshape,mesh,phi_b,B,A)
   ! LOCAL POINTER ALIAS
   ! Makes code a bit easier to read
   REAL(FP),DIMENSION(:),POINTER :: x,y,z
-
-  ! Compute the extent of the mesh
-  DO i=1,3
-    Lq(i) = MAXVAL(mesh(i)%val) - MINVAL(mesh(i)%val)
-  ENDDO  
   
   ! Compute volume
   Vq = PRODUCT(Lq)
@@ -982,14 +985,14 @@ END SUBROUTINE
 !!
 !
 !>@param[in]  nshape  Shape of boundary. [n1,n2]
-!>@param[in]  chi     Function whose perpendicualar gradient is used to compute At
+!>@param[in]  chi     Function whose perpendicular gradient is used to compute At
 !>@param[in]  dq      Mesh spacing
 !>@param[in]  tvec1   First unit tangent vector in boundary
 !>@param[in]  tvec2   Second unit tangent vector in boundary
 !>@param[in]  nvec    Nornaml vector at boundary: nvec = tvec1 x tvec2
 !
 !
-SUBROUTINE compute_At_bcs(nshape,chi,dq1,dq2,tvec1,tvec2,nvec,At1,At2)
+SUBROUTINE compute_At_bcs(nshape,chi,dq1,dq2,periodic,tvec1,tvec2,nvec,At1,At2)
 
   IMPLICIT NONE 
 
@@ -998,6 +1001,7 @@ SUBROUTINE compute_At_bcs(nshape,chi,dq1,dq2,tvec1,tvec2,nvec,At1,At2)
   REAL(FP)   ,DIMENSION(nshape(1),nshape(2)),INTENT(IN) :: chi
   REAL(FP)                                  ,INTENT(IN) :: dq1,dq2
   REAL(FP)   ,DIMENSION(3)                  ,INTENT(IN) :: tvec1,tvec2,nvec
+  LOGICAL    ,DIMENSION(2)                  ,INTENT(IN) :: periodic
   
   ! OUTPUT
   REAL(FP),DIMENSION(nshape(1),nshape(2)),INTENT(OUT) :: At1,At2
@@ -1005,7 +1009,7 @@ SUBROUTINE compute_At_bcs(nshape,chi,dq1,dq2,tvec1,tvec2,nvec,At1,At2)
   ! LOCAL
   REAL(FP)              :: mesh_vec(2),dchi_dq1,dchi_dq2
   REAL(FP),DIMENSION(3) :: grad_cross_n
-  INTEGER(IT)           :: i,j,k,nq1,nq2
+  INTEGER(IT)           :: i,j,k,nq1,nq2,il,ih,jh,jl
   REAL(FP),PARAMETER    :: inv2 = REAL(1,FP)/REAL(2,FP)
 
   ! Compute spacing factor 
@@ -1015,22 +1019,37 @@ SUBROUTINE compute_At_bcs(nshape,chi,dq1,dq2,tvec1,tvec2,nvec,At1,At2)
   nq1 = SIZE(At1,1)
   nq2 = SIZE(At1,2)
   
-  !$OMP PARALLEL DO PRIVATE(i,j,k,dchi_dq1,dchi_dq2,grad_cross_n)
+  !$OMP PARALLEL DO PRIVATE(i,j,k,dchi_dq1,dchi_dq2,grad_cross_n,il,ih,jl,jh)
   DO j=1,nq2
     DO i=1,nq1
     
-      ! Regular gradient in direction tvec1 
-      IF((i==1) .OR. (i==nq1)) THEN
-        dchi_dq1 = 0
-      ELSE
-        dchi_dq1 = mesh_vec(1)*(chi(i+1,j)-chi(i-1,j))
+      il = i-1
+      ih = i+1
+      jl = j-1
+      jh = j+1
+      
+      ! Wrap around for periodic boundaries
+      IF(periodic(1)) THEN
+        IF(il == 0    ) il = nq1 
+        IF(ih == nq1+1 ) ih = 1 
+      ENDIF
+      IF(periodic(2)) THEN
+        IF(jl == 0  )   jl =  nq2 
+        IF(jh == nq2+1 ) jh = 1
       ENDIF
       
-      ! Regular gardient in direction tvec2
-      IF((j==1).OR. (j==nq2)) THEN
+      ! Regular gradient in direction tvec1 
+      IF((il<1) .OR. (ih>nq1)) THEN
+        dchi_dq1 = 0
+      ELSE
+        dchi_dq1 = mesh_vec(1)*(chi(ih,j)-chi(il,j))
+      ENDIF
+      
+      ! Regular gradient in direction tvec2
+      IF((jl<1) .OR. (jh>nq2)) THEN
         dchi_dq2 = 0
       ELSE
-        dchi_dq2 = mesh_vec(2)*(chi(i,j+1)-chi(i,j-1))        
+        dchi_dq2 = mesh_vec(2)*(chi(i,jh)-chi(i,jl))        
       ENDIF
     
       ! Compute grad(chi) x n
@@ -1084,7 +1103,7 @@ END FUNCTION
 
 ! ---------------------------------------------------------------------
 
-FUNCTION trapz_2D(n1,n2,dq1,dq2,f)
+FUNCTION trapz_2D(n1,n2,dq1,dq2,periodic,f)
 
   IMPLICIT NONE
 
@@ -1092,32 +1111,42 @@ FUNCTION trapz_2D(n1,n2,dq1,dq2,f)
   INTEGER(IT)              ,INTENT(IN) :: n1,n2
   REAL(FP)                 ,INTENT(IN) :: dq1,dq2
   REAL(FP),DIMENSION(n1,n2),INTENT(IN) :: f
+  LOGICAL ,DIMENSION(2)    ,INTENT(IN) :: periodic
   
   ! RETURN
   REAL(FP) :: trapz_2D
   
   ! LOCAL
   REAL(FP),DIMENSION(:,:),ALLOCATABLE :: w
-  REAL(FP),PARAMETER                  :: inv4 = REAL(1,FP)/REAL(4,FP)
   REAL(FP),PARAMETER                  :: inv2 = REAL(1,FP)/REAL(2,FP)
+  REAL(FP),PARAMETER                  :: inv4 = REAL(1,FP)/REAL(4,FP)
   
   ALLOCATE(w(n1,n2))
-   
+      
   ! Volume
   w = 1
   
-  ! Edge: Must be set before corners 
-  w(1,: ) = inv2
-  w(:,1 ) = inv2
-  w(n1,:) = inv2
-  w(:,n2) = inv2
+  ! Correct weights at edges. No correction
+  ! for periodic 
+  !
+  IF (.NOT. periodic(1)) THEN
+    w(1,: ) = inv2
+    w(n1,:) = inv2  
+  ENDIF
+  IF (.NOT. periodic(2)) THEN
+    w(:,1 ) = inv2
+    w(:,n2) = inv2
+  ENDIF
   
-  ! Corners
-  w(1,1 )  = inv4
-  w(1,n2)  = inv4
-  w(n1,1)  = inv4
-  w(n1,n2) = inv4
-  
+  ! Corner weights further modified if both dimensions not
+  ! periodic
+  IF (.NOT. ANY(periodic) ) THEN
+    w(1,1)   = inv4
+    w(n1,1)  = inv4    
+    w(1,n2)  = inv4    
+    w(n1,n2) = inv4
+  ENDIF  
+    
   trapz_2D = SUM(w*f)*dq1*dq2
 
 END FUNCTION

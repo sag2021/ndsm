@@ -229,6 +229,20 @@ SUBROUTINE ndsm_relax_wrapper(this,g_id,u,rhs)
   nc  = 2*this%ndim
   bcs = RESHAPE(this%copt(1:nc),[this%ndim,i2])
 
+  ! Call optimized routine for 3D
+  IF(this%ndim == 3) THEN
+    CALL red_black_gauss_3D(bcs                    , &
+                            this%nshape(1,g_id)    , &
+                            this%nshape(2,g_id)    , &
+                            this%nshape(3,g_id)    , &
+                            this%meshes(1,g_id)%val, &
+                            this%meshes(2,g_id)%val, & 
+                            this%meshes(3,g_id)%val, &
+                            this%rhs(g_id)%val     , & 
+                            this%u(g_id)%val       )
+    RETURN
+  ENDIF
+  
   !
   ! Call relaxation operator on grid with grid ID g_id
   !

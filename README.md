@@ -20,11 +20,47 @@ tested on a Linux platform.
 An earlier version of this code was used and is decribed in the paper Yang K.E., Wheatland M.S., and Gilchrist S.A.: 2020, ApJ,984,151. 
 Paper DOI: 10.3847/1538-4357/ab8810
 
+# Periodic boundary conditions
+
+Now supports periodic boundary conditions. If using via Python, then the
+option `periodic` is a list of bools that determine if a dimension is
+periodic. The first dimension is x, and the last is y, so `periodic = [True, True, False]`
+uses periodic boundary conditions in the x and y dimensions.
+
+Setting `periodic = [True, True, True]` will result in a zero solution.
+
+Once a dimension is set to periodic, boundary conditions on both boundaries
+are ignored in favor of periodicity.
+
+If calling via Fortran, then setting boundary conditions is, at present,
+more complicated. The correct boundary condition flags must be passed
+via copt and the mesh pointer must have its periodic flag set.
+
 # Mesh and dimensions
 
-The mesh is rectilinear, i.e. it is described by three mesh vectors x,y,z. These are assumed
+The mesh is rectilinear, i.e. it is described by three mesh vectors x, y, z. These are assumed
 to have fixed spacing. The code makes no explicit assumptions about the units of either B or A, although the
-length scales are non-dimensional. 
+length scales are non-dimensional.
+
+## Periodic mesh
+
+The periodicity assumed is that of an FFT. If $L_i$ is the extent
+of the mesh in dimension $i$, then the spacing $\Delta_i$ differs
+between the periodic and non-periodic solutions.
+
+### Periodic mesh spacing
+
+$$
+  \Delta_i = \frac{L_i}{n_i},
+$$
+where $n_i$ is the number of mesh points in dimension $i$.
+
+### Non-periodic mesh spacing
+
+$$
+  \Delta_i = \frac{L_i}{n_i - 1},
+$$
+where $n_i$ is the number of mesh points in dimension $i$.
 
 # Vector Potential Gauge 
 

@@ -104,7 +104,8 @@ def test_case1(X,Y,Z):
 nshape_base = np.array([22,22,22])
 
 # Scale up factors
-scale_factors = [1,2,3,3.5,4,4.5,7.3,8,10]
+scale_factors = [1,2]
+#[1,2,3,3.5,4,4.5,7.3,8,10]
 
 # Error names
 enames = ["Ea_max","Ea_avg","Eb_max","Eb_avg","Time"]

@@ -183,7 +183,7 @@ SUBROUTINE new_mg_handle(this,ndim,nshape,ngrids,mesh,du_max,nmax_exact)
   
   ! LOCAL PARAM.
   REAL(FP),PARAMETER :: inv2 = REAL(1,FP)/REAL(2,FP) ! 1/2
-    
+        
   ! Set conv. flag
   this%du_max = du_max
 
@@ -835,7 +835,7 @@ SUBROUTINE solve_exact(this,grid_id,relax)
     ENDIF
 
     ! TODO: TEST
-    !PRINT *,"A:",i,  du,SUM(fe), this%ex_tol
+  !  PRINT *,"A:",i,  du,SUM(fe), this%ex_tol
           
     ! Save previous iteration 
     CALL copy(u_sav,ue)  

@@ -60,9 +60,15 @@ SUBROUTINE red_black_gauss_3D(bcs,nx,ny,nz,x,y,z,rhs,u)
   INTEGER(IT) :: i,j,k
   INTEGER(IT) :: xl,yl,zl,xh,yh,zh
   INTEGER(IT) :: lb(3),ub(3),nsize
+  LOGICAL     :: periodic(3) 
 
   ! LOCAL LITS.
   INTEGER(IT),PARAMETER :: i2 = 2
+    
+  ! Set flag, if periodic both must be
+  DO i=1,3
+    periodic(i) = (bcs(i,1)=="P")
+  ENDDO  
     
   ! Get array bounds
   lb = [1 ,1 ,1]
@@ -109,15 +115,11 @@ SUBROUTINE red_black_gauss_3D(bcs,nx,ny,nz,x,y,z,rhs,u)
         xl = i-1; xh = i+1
         yl = j-1; yh = j+1    
         zl = k-1; zh = k+1
-          
-        IF(xl < 1 ) xl = 2
-        IF(xh > nx) xh = nx-1
-      
-        IF(yl < 1 ) yl = 2
-        IF(yh > ny) yh = ny-1
-            
-        IF(zl < 1 ) zl = 2
-        IF(zh > nz) zh = nz-1
+        
+        ! Boundary enforce  
+        CALL boundary_index(periodic(1),xl,xh,nx)
+        CALL boundary_index(periodic(2),yl,yh,ny)
+        CALL boundary_index(periodic(3),zl,zh,nz)
           
         ! Perform relaxation 
         unew =  (u(xh,j,k) +  u(xl,j,k))*wx &
@@ -143,14 +145,10 @@ SUBROUTINE red_black_gauss_3D(bcs,nx,ny,nz,x,y,z,rhs,u)
         yl = j-1; yh = j+1    
         zl = k-1; zh = k+1
           
-        IF(xl < 1 ) xl = 2
-        IF(xh > nx) xh = nx-1
-      
-        IF(yl < 1 ) yl = 2
-        IF(yh > ny) yh = ny-1
-            
-        IF(zl < 1 ) zl = 2
-        IF(zh > nz) zh = nz-1
+        ! Boundary enforce  
+        CALL boundary_index(periodic(1),xl,xh,nx)
+        CALL boundary_index(periodic(2),yl,yh,ny)
+        CALL boundary_index(periodic(3),zl,zh,nz)
           
         ! Perform relaxation 
         unew =  (u(xh,j,k) +  u(xl,j,k))*wx &
@@ -170,7 +168,7 @@ SUBROUTINE red_black_gauss_3D(bcs,nx,ny,nz,x,y,z,rhs,u)
   ! solution
   !
   !
-  IF(ALL(bcs== "N")) THEN  
+  IF(.NOT. ALL(bcs== "D")) THEN  
 
     ! Compute mean
     umean = 0
@@ -191,146 +189,32 @@ SUBROUTINE red_black_gauss_3D(bcs,nx,ny,nz,x,y,z,rhs,u)
 END SUBROUTINE
 
 ! ---------------------------------------------------------------------  
-!
-!>@name red_black_gauss_2D
-!
-!>@brief Performs one sweep of red/black Gauss-Seidel relaxation in 2D
-  
-SUBROUTINE red_black_gauss_2D(bcs,nx,ny,x,y,rhs,u)
 
-  USE NDSM_MULTIGRID_CORE,ONLY: mean
+PURE SUBROUTINE boundary_index(periodic,ql,qh,nq)
 
-  IMPLICIT NONE
-  
   ! INPUT
-  INTEGER(IT)                    ,INTENT(IN)  :: nx,ny
-  REAL(FP),DIMENSION(nx)         ,INTENT(IN)  :: x
-  REAL(FP),DIMENSION(ny)         ,INTENT(IN)  :: y
-  REAL(FP),DIMENSION(nx,ny)      ,INTENT(IN)  :: rhs
-  CHARACTER(LEN=1),DIMENSION(2,2),INTENT(IN)  :: bcs
-
+  LOGICAL    ,INTENT(IN)    :: periodic
+  INTEGER(IT),INTENT(IN)    :: nq
+  
   ! INPUT/OUTPUT
-  REAL(FP),DIMENSION(nx,ny),INTENT(INOUT) :: u
-
-  ! LOCAL
-  REAL(FP) :: unew,umean
-  REAL(FP) :: hx,hy,w1,wx,wy
-  INTEGER(IT)  :: i,j
-  INTEGER(IT)  :: xl,yl,xh,yh
-  INTEGER(IT)  :: lb(2),ub(2),nsize
-
-  ! LOCAL LITS.
-  INTEGER(IT),PARAMETER :: i2 = 2
-    
-  ! Get array bounds
-  lb = LBOUND(u)
-  ub = UBOUND(u)
-  
-  ! Total size
-  nsize = SIZE(u)
-
-  ! Modify bounds based on boundary conditions
-  WHERE(bcs(:,1) == "D") lb = lb + 1
-  WHERE(bcs(:,2) == "D") ub = ub - 1
-
-  ! Grid has uniform spacing
-  hx = x(2)-x(1)
-  hy = y(2)-y(1)
-
-  ! Second-order centred difference weights for off-diagonal terms,
-  ! e.g. u(i+1,j,k) etc.
-  !
-  !
-  wx = REAL(1,FP)/hx**2
-  wy = REAL(1,FP)/hy**2
+  INTEGER(IT),INTENT(INOUT) :: ql,qh
  
-  ! Second-order centred difference weights for diagonal term
-  !
-  w1 = REAL(2,FP)/hx**2 &  
-     + REAL(2,FP)/hy**2  
-    
-  w1 = REAL(1,FP)/w1
-            
-  ! ========================
-  ! RELAXATION 
-  ! ========================
-  !
-  ! Relax using weighted Jacobi method
-  !
-  
-  !$OMP  PARALLEL DO PRIVATE(i,j,xl,xh,yl,yh,unew) 
-  DO j=lb(2),ub(2)
-    DO i=lb(1)+MOD(j,i2),ub(1),2
-
-        ! Get points surrounding (i,j)
-        xl = i-1; xh = i+1
-        yl = j-1; yh = j+1    
-          
-        IF(xl < 1 ) xl = 2
-        IF(xh > nx) xh = nx-1
-      
-        IF(yl < 1 ) yl = 2
-        IF(yh > ny) yh = ny-1
-            
-        ! Perform relaxation 
-        unew =  (u(xh,j) +  u(xl,j))*wx &
-             +  (u(i,yh) +  u(i,yl))*wy &
-             -  rhs(i,j)
-               
-        ! Update 
-        u(i,j) = w1*unew
-        
-    ENDDO
-  ENDDO
-  !$OMP END PARALLEL DO
-
-  !$OMP  PARALLEL DO PRIVATE(i,j,xl,xh,yl,yh,unew) 
-  DO j=lb(2),ub(2)
-    DO i=lb(1)+MOD(j+1,i2),ub(1),2 
-
-        ! Get points surrounding (i,j,k)
-        xl = i-1; xh = i+1
-        yl = j-1; yh = j+1    
-          
-        IF(xl < 1 ) xl = 2
-        IF(xh > nx) xh = nx-1
-      
-        IF(yl < 1 ) yl = 2
-        IF(yh > ny) yh = ny-1
-                      
-        ! Perform relaxation 
-        unew =  (u(xh,j) +  u(xl,j))*wx &
-             +  (u(i,yh) +  u(i,yl))*wy &
-             -  rhs(i,j)
-                       
-        ! Update 
-        u(i,j) = w1*unew
-        
-    ENDDO
-  ENDDO
-  !$OMP END PARALLEL DO
-  
-  ! Compute mean. Used to pick unique Neumann 
-  ! solution
-  !
-  !
-  umean = 0
-  
-  IF(ALL(bcs== "N")) THEN  
-    umean = mean(nsize,u)
+  IF(ql < 1) THEN
+    IF(periodic) THEN
+      ql = nq 
+    ELSE
+      ql = 2 
+    ENDIF
   ENDIF
-    
-  ! 
-  ! Copy back to ut and subtract mean
-  !
-  !$OMP  PARALLEL DO PRIVATE(i,j) 
-  DO j=lb(2),ub(2)
-    DO i=lb(1),ub(1)        
-        u(i,j) = u(i,j) - umean        
-    ENDDO
-  ENDDO
-  !$OMP END PARALLEL DO 
-    
+  
+  IF(qh > nq) THEN
+    IF(periodic) THEN
+      qh = 1
+    ELSE
+      qh = nq-1
+    ENDIF
+  ENDIF
+   
 END SUBROUTINE
 
 ! ---------------------------------------------------------------------

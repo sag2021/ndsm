@@ -119,6 +119,11 @@ FUNCTION ndsm_vector_solve(nsize,nshape4,ioptc,ropt,x,y,z,A,B) BIND(C) RESULT(ie
   mesh(2)%val = y
   mesh(3)%val = z
   
+  ! Set periodic flag 
+  mesh(1)%periodic =  (iopt(IOPT_PER_X) == IOPT_TRUE)
+  mesh(2)%periodic =  (iopt(IOPT_PER_Y) == IOPT_TRUE)
+  mesh(3)%periodic =  (iopt(IOPT_PER_Z) == IOPT_TRUE)
+  
   ! =============
   ! SOLVE 
   ! =============
@@ -231,6 +236,24 @@ FUNCTION get_ropt_ctol() BIND(C) RESULT(val)
   IMPLICIT NONE
   INTEGER(C_INT) :: val
   val = ROPT_CTOL
+END FUNCTION
+
+FUNCTION get_IOPT_PER_X() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val  
+  val = IOPT_PER_X
+END FUNCTION
+
+FUNCTION get_IOPT_PER_Y() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val  
+  val = IOPT_PER_Y
+END FUNCTION
+
+FUNCTION get_IOPT_PER_Z() BIND(C) RESULT(val)
+  IMPLICIT NONE
+  INTEGER(C_INT) :: val  
+  val = IOPT_PER_Z
 END FUNCTION
 
 END MODULE

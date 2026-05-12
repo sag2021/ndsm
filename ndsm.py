@@ -63,7 +63,9 @@ def get_lib_path(libname):
 
 # ---------------------------------------------------------------------
 
-def vector_potential(x,y,z,b,niterex_max=10000,ncycles_max=1024,ex_tol=1e-13,vc_tol=1e-10,ms=5,mean=False,libname="ndsmf.so",libpath=None,debug=False):
+def vector_potential(x,y,z,b,niterex_max=10000,ncycles_max=1024,ex_tol=1e-13,
+                      vc_tol=1e-10,ms=5,mean=False,periodic=[False,False,False],
+                      libname="ndsmf.so",libpath=None,debug=False):
   """
 
     For multigrid, it is necessary to compute an "exact" solution on the 
@@ -108,6 +110,8 @@ def vector_potential(x,y,z,b,niterex_max=10000,ncycles_max=1024,ex_tol=1e-13,vc_
       mean: bool
         Use mean difference as the metric to measure change in solution
         rather than the max
+      periodic: [bools]
+        Set dimension to periodic 
 
     Returns:
     --------
@@ -172,7 +176,10 @@ def vector_potential(x,y,z,b,niterex_max=10000,ncycles_max=1024,ex_tol=1e-13,vc_
   iopt_debug   = libc.get_iopt_debug()
   iopt_dumax   = libc.get_iopt_dumax()
   iopt_nmaxex  = libc.get_iopt_iopt_nmaxex()
-  
+  iopt_per_x   = libc.get_iopt_per_x()
+  iopt_per_y   = libc.get_iopt_per_y()
+  iopt_per_z   = libc.get_iopt_per_z()
+   
   # Check bounds. This shouldn't occur in normal function. Only 
   # an bug in the Fortran lib should cause this
   indx = np.array([iopt_ms,iopt_ncycles,iopt_ctol,iopt_vtol],dtype=np.intc)
@@ -185,6 +192,14 @@ def vector_potential(x,y,z,b,niterex_max=10000,ncycles_max=1024,ex_tol=1e-13,vc_
   ioptc[iopt_nmaxex]  = niterex_max  # Max. iterations for exact solution
   ropt[iopt_vtol]     = vc_tol       # V cycle tol
   ropt[iopt_ctol]     = ex_tol       # Tol. course
+
+  # Set periodic flag
+  flags = [iopt_per_x,iopt_per_y,iopt_per_z]
+  for i,is_periodic in enumerate(periodic):
+    if is_periodic:
+      ioptc[flags[i]] = libc.get_iopt_true() 
+    else:
+      ioptc[flags[i]] = libc.get_iopt_false()     
 
   # Debug flag
   if(debug):
