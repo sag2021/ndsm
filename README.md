@@ -40,6 +40,9 @@ If calling via Fortran, then setting boundary conditions is, at present,
 more complicated. The correct boundary condition flags must be passed
 via copt and the mesh pointer must have its periodic flag set.
 
+Periodic boundary conditions are not used in the calculation of $curl(A)$.
+A lopsided stencil is used. 
+
 # Mesh and dimensions
 
 The mesh is rectilinear, i.e. it is described by three mesh vectors x, y, z. These are assumed

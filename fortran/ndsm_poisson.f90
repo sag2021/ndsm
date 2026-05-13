@@ -339,7 +339,7 @@ SUBROUTINE residual(ndim,nsize,nshape,qvecs,bcs,u,rhs,r)
     u_mean = mean(nsize,r)
     !$OMP PARALLEL DO PRIVATE(n)
     DO n=1,nsize
-     ! r(n) = r(n) - u_mean
+      r(n) = r(n) - u_mean
     ENDDO
     !$OMP END PARALLEL DO    
   ENDIF

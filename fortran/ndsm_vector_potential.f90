@@ -648,7 +648,7 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   
   ! Compute number of grids to use
   nmin   = MINVAL(nshape(:3))
-  ngrids =FLOOR(LOG(nmin/BASE_GRID)/LOG(REAL(2,FP)))
+  ngrids = FLOOR(LOG(nmin/BASE_GRID)/LOG(REAL(2,FP)))
   
   ! Unpack
   max_vcycles = IOPT(IOPT_NCYCLES)
@@ -713,8 +713,6 @@ SUBROUTINE solve(ROPT,IOPT,mesh,nsize_bn,nshape,At,Ac)
   CALL set_periodic_flags_3D( bvp%copt(1:6) ,mesh)
   CALL solve_poisson_bvp(bvp,nsize,vcycle_tol,max_vcycles,Ac(:,:,:,3),rhs,du_last,ierr) 
   CALL delete_mg_handle(bvp) 
-
-
     
 END SUBROUTINE
 

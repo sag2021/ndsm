@@ -97,7 +97,7 @@ def test_case1(X,Y,Z):
 nshape_base = np.array([16,16,16])
 
 # Scale up factors
-scale_factors = [1,2,3,4,6]
+scale_factors = [1,2,3,4,6,10,20]
 
 periodic = np.array([True,False,False])
 
@@ -144,15 +144,10 @@ for i,scale in enumerate(scale_factors):
   # Compute vector potential and magnetic field
   bc         = b1.copy()
   t1         = time.time()
-  ierr,A2,b2 = vector_potential(x,y,z,bc,mean=False,debug=True,periodic=periodic)
+  ierr,A2,b2 = vector_potential(x,y,z,bc,mean=False,debug=False,periodic=periodic)
   t2         = time.time()
   dt         = t2-t1  
   
-#  plt.imshow(A2[0,10,:,:])
-#  plt.show()
-#  sys.exit(0)
-  
-
   # Error metrics
   Eb_avg1 = (np.linalg.norm(b1-b2,axis=0)).mean()
   Eb_max1 = (np.linalg.norm(b1-b2,axis=0)).max()

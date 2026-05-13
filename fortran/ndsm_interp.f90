@@ -224,7 +224,7 @@ SUBROUTINE nrestrict(ndim,nsize_c,nshape_c,qvecs_c,qvecs_f,q0_f,uf0,uc)
  
   ! Loop over course grid points. Add weighted contribution 
   ! from uf(q0)   
-  DO n=1,ndim**2
+  DO n=1,2**ndim
     
     ! Get ND index of course point and its coordinate 
     CALL bit2array(n-i1,svec)    
