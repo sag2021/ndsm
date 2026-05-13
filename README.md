@@ -1,3 +1,7 @@
+# Warning
+
+TESTING STILL IN PROGRESS FOR PERIODIC BRANCH
+
 # Code description
 
 Code computes the potential (current-free) magnetic field on a rectilinear mesh in a Cartesian box, given

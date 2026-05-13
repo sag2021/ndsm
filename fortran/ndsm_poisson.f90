@@ -335,11 +335,11 @@ SUBROUTINE residual(ndim,nsize,nshape,qvecs,bcs,u,rhs,r)
   !$OMP END PARALLEL DO
 
   ! Remove mean from res
-  IF(.NOT. ALL(bcs == "D")) THEN
+  IF(.NOT. ANY(bcs == "D")) THEN
     u_mean = mean(nsize,r)
     !$OMP PARALLEL DO PRIVATE(n)
     DO n=1,nsize
-      r(n) = r(n) - u_mean
+     ! r(n) = r(n) - u_mean
     ENDDO
     !$OMP END PARALLEL DO    
   ENDIF
@@ -525,7 +525,7 @@ SUBROUTINE relax(ndim,nsize,nshape,qvecs,bcs,u,rhs)
   !
   ! For pure Neumann problems, the mean must be subtracted off
   !    
-  IF(.NOT. ALL(bcs == "D")) THEN
+  IF(.NOT. ANY(bcs == "D")) THEN
 
     ! Compute mean
     u_mean = mean(nsize,u)

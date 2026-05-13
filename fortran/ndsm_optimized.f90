@@ -168,7 +168,7 @@ SUBROUTINE red_black_gauss_3D(bcs,nx,ny,nz,x,y,z,rhs,u)
   ! solution
   !
   !
-  IF(.NOT. ALL(bcs== "D")) THEN  
+  IF(.NOT. ANY(bcs == "D")) THEN
 
     ! Compute mean
     umean = 0
